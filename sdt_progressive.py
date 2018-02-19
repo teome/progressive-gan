@@ -26,8 +26,6 @@ class SDTProgressive(BaseModel):
         self.ngpu = opt.ngpu
         self.Tensor = torch.FloatTensor if self.ngpu > 0 else torch.Tensor
         self.outf = opt.outf
-        size = opt.fineSize
-        batch_size = opt.batchSize
         self.batch_size = opt.batchSize
         self.input_nc = 3
         self.max_resolution = opt.fineSize
@@ -35,8 +33,11 @@ class SDTProgressive(BaseModel):
         self.max_stage = opt.max_stage
         self._stage = None
 
-        self.input_A = self.Tensor(batch_size, self.input_nc, size, size)
-        self.input_B = self.Tensor(batch_size, self.input_nc, size, size)
+        size = opt.fineSize
+        batch_size = opt.batchSize
+        self.real = self.Tensor(batch_size, self.input_nc, size, size)
+        self.latent = self.Tensor(batch_size, self.nz, 1, 1)
+        self.latent_fixed = self.Tensor(batch_size, self.nz, 1, 1)
 
         # Note that the base size is 4x4, hence the -2 here
         max_stage = self.resolution_stage(self.max_resolution)
@@ -50,31 +51,24 @@ class SDTProgressive(BaseModel):
         self.max_stage = max_stage
 
         netG = Generator(self.nz, self.input_nc, opt.ngf,
-                              max_stage=self.max_stage)
+                         max_stage=self.max_stage)
 
         gpu_ids = range(self.ngpu) if self.ngpu > 0 else None
         self.netG = nn.parallel.DataParallel(netG, device_ids=gpu_ids)
+
+        # Fixed vector for image generation
+        latent_fixed = self.netG.module.latent(self.batch_size)
+        self.latent_fixed.copy_(latent_fixed if self.ngpu < 1 else
+                                latent_fixed.cuda())
 
         if not opt.phase == 'test':
             netD = Discriminator(self.output_nc, opt.ndf,
                                  max_stage=self.max_stage)
             self.netD = nn.parallel.DataParallel(netD, device_ids=gpu_ids)
 
-        iter_count = self.load_model()
-        # Hack to allow iter_count incrementing at the start of
-        # each iteration, rather than the end.  This is needed to allow
-        # eval and testing after a training iteration with same value
-        # for stage
-        self.iter_count = iter_count if iter_count > 0 else -1
+        self.iter_count = self.load_model()
 
-        if not self.phase == 'test':
-            self.old_lr = opt.lr
-            # define loss functions
-            self.criterionL1 = torch.nn.L1Loss()
-            if opt.lambda_perc > 0:
-                self.criterionPerc = networks.PerceptualLoss(
-                    net=networks.vgg19(pretrained=True, model_dir=opt.vgg_dir),
-                    tensor=self.Tensor)
+        self.old_lr = opt.lr
 
         if self.phase == 'train':
             # initialize optimizers
@@ -101,11 +95,8 @@ class SDTProgressive(BaseModel):
                     get_scheduler(optimizer, opt,
                                   self.iter_count))
 
-            self.comparative = opt.comparative
-            if self.comparative == "dis":
-                consts = [1, 1]
-            else:
-                consts = [int(c) for c in opt.comp_const.split("/")]
+            self.comparative = 'freq'
+            consts = [int(c) for c in opt.comp_const.split("/")]
 
             self.comp_const = {
                 'G': consts[0],
@@ -118,6 +109,7 @@ class SDTProgressive(BaseModel):
             if not self.phase == 'test':
                 networks.print_network(self.netD)
             print('-----------------------------------------------')
+
 
     def get_iter_count(self):
         return self.iter_count
@@ -139,11 +131,13 @@ class SDTProgressive(BaseModel):
     def resolution_stage(self, resol):
         return 2 * (np.log2(resol) - 2)
 
-    def update(self):
+    def update(self, real_cpu):
         stage = self.stage
         max_resol = self.max_resolution
 
-        input_real = Variable(self.input_A)
+        if self.ngpu > 0:
+            real_cpu = real_cpu.cuda()
+        input_real = Variable(real_cpu)
         x_real = Variable(self.input_B)
 
         if (math.floor(stage) & 1) == 0:
@@ -199,7 +193,7 @@ class SDTProgressive(BaseModel):
                 dy_interp = grad(
                         outputs=y_interp,
                         inputs=x_interp,
-                        grad_outputs=torch.ones(y_interp.size()) if (len(self.gpu_ids) < 1) or (self.gpu_ids is None) else torch.ones(y_interp.size()).cuda(),
+                        grad_outputs=torch.ones(y_interp.size()) if self.ngpu < 1 else torch.ones(y_interp.size()).cuda(),
                         create_graph=True,
                         retain_graph=True,
                         only_inputs=True)[0]
@@ -259,9 +253,10 @@ class SDTProgressive(BaseModel):
             if self.phase == 'train':
                 self.loss_G.backward()
                 self.optimizer_G.step()
+        if self.phase == 'train':
+            self.iter_count += 1
 
     def optimize_parameters(self):
-        self.iter_count += 1
         self.update()
 
     def validate(self):
@@ -291,7 +286,7 @@ class SDTProgressive(BaseModel):
         return self.image_paths
 
     def _load_model(self, epoch):
-        epoch_label = "%04d" % (epoch)
+        epoch_label = "%06d" % (epoch)
         self.load_network(self.netG, 'G', epoch_label)
         if not self.phase == 'test':
             self.load_network(self.netD, 'D', epoch_label)
@@ -301,7 +296,7 @@ class SDTProgressive(BaseModel):
         latest_iter = 0
 
         if self.opt.auto_continue and not self.opt.continue_train and self.phase == 'train':
-            last_iters = util.get_latest_checkpoints(self.opt)
+            last_iters = get_latest_checkpoints(self.opt)
             if last_iters:
                 for iteration in last_iters:
                     try:
@@ -332,6 +327,29 @@ class SDTProgressive(BaseModel):
 
         iter_count = latest_iter
         return iter_count
+
+    # helper saving function that can be used by subclasses
+    def save_network(self, network, network_label, epoch_label):
+        save_filename = '%s_net_%s.pth' % (epoch_label, network_label)
+        save_path = os.path.join(self.save_dir, save_filename)
+        torch.save(network.cpu().state_dict(), save_path)
+        if self.ngpu > 0 and torch.cuda.is_available():
+            network.cuda(device=0)
+
+    # helper loading function that can be used by subclasses
+    def load_network(self, network, network_label, epoch_label):
+        save_filename = '%s_net_%s.pth' % (epoch_label, network_label)
+        save_path = os.path.join(self.save_dir, save_filename)
+        network.load_state_dict(torch.load(save_path))
+
+    # update learning rate (called once every epoch)
+    def update_learning_rate(self):
+        for scheduler in self.schedulers:
+            scheduler.step()
+
+    def print_learning_rate(self):
+        lr = self.optimizers[0].param_groups[0]['lr']
+        print('learning rate = %.7f' % lr)
 
     def set_input(self, input):
         input_A = input['A']
@@ -374,8 +392,8 @@ class SDTProgressive(BaseModel):
         return visuals
 
     def save(self, label):
-        self.save_network(self.netG, 'G', label, self.gpu_ids)
-        self.save_network(self.netD, 'D', label, self.gpu_ids)
+        self.save_network(self.netG, 'G', label)
+        self.save_network(self.netD, 'D', label)
 
     def should_train(self):
         """Return a list (G, D_A, D_B) of flags, e.g. [0, 1, 0] means only D_A
@@ -412,4 +430,21 @@ def get_scheduler(optimizer, opt, iter_count=1):
             'learning rate policy [%s] is not implemented', opt.lr_policy)
     return scheduler
 
+
+def get_latest_checkpoints(opt):
+    chkp_suffix = '_net_D.pth'
+    chkp_pattern = os.path.join(opt.checkpoints_dir, opt.name,
+                                '*%s' % chkp_suffix)
+    list_of_files = glob.glob(chkp_pattern)
+
+    if len(list_of_files) == 0:
+        latest_epochs = None
+    else:
+        latest_files = sorted(
+            list_of_files, key=os.path.getctime, reverse=True)[:2]
+        latest_epochs = [
+            int(os.path.basename(lf).strip(chkp_suffix)) for lf in latest_files
+        ]
+
+    return latest_epochs
 
