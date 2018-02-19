@@ -109,7 +109,7 @@ class Generator(nn.Module):
         self.b6 = GenUpBlock(ngf, ngf // 2)
         self.out6 = EqualizedConv2d(ngf // 2, 3, 1, 1, 0)
 
-    def latent(self, batch_size):
+    def sample_latent(self, batch_size):
         z = torch.FloatTensor(batch_size, nz, 1, 1).normal_(0, 1)
         z /= z.norm(2) + 1e-8
         return z

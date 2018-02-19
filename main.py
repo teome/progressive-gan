@@ -2,6 +2,7 @@ from __future__ import print_function
 import argparse
 import os
 import random
+import time
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -16,181 +17,87 @@ from torch.autograd import Variable
 from .sdt_progressive import SDTProgressive
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', required=True, help='cifar10 | lsun | imagenet | folder | lfw | fake')
-parser.add_argument('--dataroot', required=True, help='path to dataset')
-parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
-parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
-parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
-parser.add_argument('--fineSize', type=int, default=None, help='the height / width of the input image to network')
-parser.add_argument('--nz', type=int, default=100, help='size of the latent z vector')
-parser.add_argument('--ngf', type=int, default=64)
-parser.add_argument('--ndf', type=int, default=64)
-parser.add_argument('--niter', type=int, default=25, help='number of epochs to train for')
-parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
-parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
-parser.add_argument('--cuda', action='store_true', help='enables cuda')
-parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
-parser.add_argument('--netG', default='', help="path to netG (to continue training)")
-parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--outf', default='.', help='folder to output images and model checkpoints')
-parser.add_argument('--manualSeed', type=int, help='manual seed')
-parser.add_argument('--auto-continue', action='store_true', help='auto continue training')
-parser.add_argument('--continue-train', action='store_true', help='continue from specified epoch')
-parser.add_argument('--which-epoch', type=int, default=None, help='epoch for continuation of training')
-parser.add_argument('--model-save-freq', type=int, default=100, help='frequency to save model')
-parser.add_argument('--image-save-freq', type=int, default=100, help='frequency to save images')
-parser.add_argument('--comp-const', type=str, default='1/1', help='G/D training period')
+def main(opt):
+    try:
+        os.makedirs(opt.outf)
+    except OSError:
+        pass
 
+    if opt.manualSeed is None:
+        opt.manualSeed = random.randint(1, 10000)
+    print("Random Seed: ", opt.manualSeed)
+    random.seed(opt.manualSeed)
+    torch.manual_seed(opt.manualSeed)
+    if opt.cuda:
+        torch.cuda.manual_seed_all(opt.manualSeed)
 
-opt = parser.parse_args()
-print(opt)
-opt.checkpoint_dir = opt.outf
+    cudnn.benchmark = True
 
-try:
-    os.makedirs(opt.outf)
-except OSError:
-    pass
+    if torch.cuda.is_available() and not opt.cuda:
+        print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-if opt.manualSeed is None:
-    opt.manualSeed = random.randint(1, 10000)
-print("Random Seed: ", opt.manualSeed)
-random.seed(opt.manualSeed)
-torch.manual_seed(opt.manualSeed)
-if opt.cuda:
-    torch.cuda.manual_seed_all(opt.manualSeed)
+    if opt.dataset in ['imagenet', 'folder', 'lfw']:
+        # folder dataset
+        dataset = dset.ImageFolder(root=opt.dataroot,
+                                transform=transforms.Compose([
+                                    transforms.Resize(opt.imageSize),
+                                    transforms.CenterCrop(opt.imageSize),
+                                    transforms.ToTensor(),
+                                    # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                                ]))
+    elif opt.dataset == 'lsun':
+        dataset = dset.LSUN(db_path=opt.dataroot, classes=['bedroom_train'],
+                            transform=transforms.Compose([
+                                transforms.Resize(opt.imageSize),
+                                transforms.CenterCrop(opt.imageSize),
+                                transforms.ToTensor(),
+                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                            ]))
+    elif opt.dataset == 'cifar10':
+        dataset = dset.CIFAR10(root=opt.dataroot, download=True,
+                            transform=transforms.Compose([
+                                transforms.Resize(opt.imageSize),
+                                transforms.ToTensor(),
+                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                            ]))
+    elif opt.dataset == 'fake':
+        dataset = dset.FakeData(image_size=(3, opt.imageSize, opt.imageSize),
+                                transform=transforms.ToTensor())
+    assert dataset
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,
+                                            shuffle=True, num_workers=int(opt.workers))
 
-cudnn.benchmark = True
+    opt.fineSize = opt.fineSize or opt.imageSize
+    opt.checkpoint_dir = opt.outf
 
-if torch.cuda.is_available() and not opt.cuda:
-    print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+    model = SDTProgressive(opt)
+    model.phase = 'train'
 
-if opt.dataset in ['imagenet', 'folder', 'lfw']:
-    # folder dataset
-    dataset = dset.ImageFolder(root=opt.dataroot,
-                               transform=transforms.Compose([
-                                   transforms.Resize(opt.imageSize),
-                                   transforms.CenterCrop(opt.imageSize),
-                                   transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                               ]))
-elif opt.dataset == 'lsun':
-    dataset = dset.LSUN(db_path=opt.dataroot, classes=['bedroom_train'],
-                        transform=transforms.Compose([
-                            transforms.Resize(opt.imageSize),
-                            transforms.CenterCrop(opt.imageSize),
-                            transforms.ToTensor(),
-                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                        ]))
-elif opt.dataset == 'cifar10':
-    dataset = dset.CIFAR10(root=opt.dataroot, download=True,
-                           transform=transforms.Compose([
-                               transforms.Resize(opt.imageSize),
-                               transforms.ToTensor(),
-                               transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                           ]))
-elif opt.dataset == 'fake':
-    dataset = dset.FakeData(image_size=(3, opt.imageSize, opt.imageSize),
-                            transform=transforms.ToTensor())
-assert dataset
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,
-                                         shuffle=True, num_workers=int(opt.workers))
+    # for epoch in range(opt.niter):
+    n_examples = len(dataloader)
+    iteration = model.iter_count
+    logger = Logger()
+    training_start_time = time.time()
+    while iteration < opt.niter:
+        for data in dataloader:
 
-ngpu = int(opt.ngpu)
-nz = int(opt.nz)
-ngf = int(opt.ngf)
-ndf = int(opt.ndf)
-nc = 3
+            real_cpu, _ = data
+            model.update(real_cpu)
 
-opt.fineSize = opt.fineSize or opt.imageSize
+            iterp1 = iteration + 1
+            if iterp1 % opt.train_log_freq == 0:
+                errors = model.get_current_errors()
+                logger.print_current_errors_csv(iteration, errors)
 
-model = SDTProgressive(opt)
-model.phase = 'train'
+            if iterp1 % opt.save_freq == 0:
+                model.save('%06d' % i)
+            if iterp1 % opt.print_iter_freq == 0:
+                print('End of iteration %d / %d \t %.3f sec/iter' %
+                    (iteration, opt.niter + opt.niter_decay,
+                    (time.time() - training_start_time) / (iterp1)))
 
-input = torch.FloatTensor(opt.batchSize, 3, opt.imageSize, opt.imageSize)
-noise = torch.FloatTensor(opt.batchSize, nz, 1, 1)
-fixed_noise = torch.FloatTensor(opt.batchSize, nz, 1, 1).normal_(0, 1)
-
-if opt.cuda:
-    netD.cuda()
-    netG.cuda()
-    criterion.cuda()
-    input, label = input.cuda(), label.cuda()
-    noise, fixed_noise = noise.cuda(), fixed_noise.cuda()
-
-fixed_noise = Variable(fixed_noise)
-
-# for epoch in range(opt.niter):
-n_examples = len(dataloader)
-i = model.iter_count
-while i < opt.niter:
-    for data in dataloader:
-
-        real_cpu, _ = data
-        model.update(real_cpu)
-
-        if i % opt.save_freq < opt.batchSize:
-            model.save('%06d' % i)
-
-        ############################
-        # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
-        ###########################
-        # train with real
-        netD.zero_grad()
-        real_cpu, _ = data
-        batch_size = real_cpu.size(0)
-        if opt.cuda:
-            real_cpu = real_cpu.cuda()
-        input.resize_as_(real_cpu).copy_(real_cpu)
-        label.resize_(batch_size).fill_(real_label)
-        inputv = Variable(input)
-        labelv = Variable(label)
-
-        output = netD(inputv)
-        errD_real = criterion(output, labelv)
-        errD_real.backward()
-        D_x = output.data.mean()
-
-        # train with fake
-        noise.resize_(batch_size, nz, 1, 1).normal_(0, 1)
-        noisev = Variable(noise)
-        fake = netG(noisev)
-        labelv = Variable(label.fill_(fake_label))
-        output = netD(fake.detach())
-        errD_fake = criterion(output, labelv)
-        errD_fake.backward()
-        D_G_z1 = output.data.mean()
-        errD = errD_real + errD_fake
-        optimizerD.step()
-
-        ############################
-        # (2) Update G network: maximize log(D(G(z)))
-        ###########################
-        netG.zero_grad()
-        labelv = Variable(label.fill_(real_label))  # fake labels are real for generator cost
-        output = netD(fake)
-        errG = criterion(output, labelv)
-        errG.backward()
-        D_G_z2 = output.data.mean()
-        optimizerG.step()
-
-        print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
-              % (i // n_examples, opt.niter, i, n_examples,
-                 errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
-        if i % 100 == 0:
-            vutils.save_image(real_cpu,
-                    '%s/real_samples.png' % opt.outf,
-                    normalize=True)
-            fake = netG(fixed_noise)
-            vutils.save_image(fake.data,
-                    '%s/fake_samples_epoch_%06d.png' % (opt.outf, i),
-                    normalize=True)
-
-        i += 1
-
-    # do checkpointing
-    torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, i))
-    torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, i))
+            model.update_learning_rate()
+            iteration += 1
 
 
 class Logger():
@@ -214,3 +121,56 @@ class Logger():
                     ['iters'] + [k for k, v in errors.items()])
             csv_out.writerow([iteration] + [v for k, v in errors.items()])
 
+
+
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset', required=True, help='cifar10 | lsun | imagenet | folder | lfw | fake')
+    parser.add_argument('--dataroot', required=True, help='path to dataset')
+    parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
+    parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
+    parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
+    parser.add_argument('--fineSize', type=int, default=None, help='the height / width of the input image to network')
+    parser.add_argument('--nz', type=int, default=100, help='size of the latent z vector')
+    parser.add_argument('--ngf', type=int, default=64)
+    parser.add_argument('--ndf', type=int, default=64)
+    parser.add_argument('--niter', type=int, default=10000, help='number of iterations to train for')
+    parser.add_argument('--niter-decay', type=int, default=200, help='number of iterations to decay learning rate')
+    parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
+    parser.add_argument('--lr-policy', type=str, default='lambda', help='lr scheduler policy')
+    parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
+    parser.add_argument('--WGAN-GP_gamma', type=float, default=1.0, help='WGAN-GP gamma')
+    parser.add_argument('--WGAN-GP_lambda', type=float, default=1.0, help='WGAN-GP lambda')
+    parser.add_argument('--pooling-comp', type=float, default=1.0, help='avg pooling comp')
+    parser.add_argument('--cuda', action='store_true', help='enables cuda')
+    parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
+    parser.add_argument('--netG', default='', help="path to netG (to continue training)")
+    parser.add_argument('--netD', default='', help="path to netD (to continue training)")
+    parser.add_argument('--outf', default='.', help='folder to output images and model checkpoints')
+    parser.add_argument('--manualSeed', type=int, help='manual seed')
+    parser.add_argument('--auto-continue', action='store_true', help='auto continue training')
+    parser.add_argument('--continue-train', action='store_true', help='continue from specified epoch')
+    parser.add_argument('--which-epoch', type=int, default=None, help='epoch for continuation of training')
+    parser.add_argument('--model-save-freq', type=int, default=100, help='frequency to save model')
+    parser.add_argument('--image-save-freq', type=int, default=100, help='frequency to save images')
+    parser.add_argument('--comp-const', type=str, default='1/1', help='G/D training period')
+    parser.add_argument('--killer', action='store_true')
+
+
+    opt = parser.parse_args()
+
+    if opt.killer:
+        import signal
+        import sys
+
+        def signal_handler(signal, frame):
+            print('Killing process!')
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+    main(opt)
