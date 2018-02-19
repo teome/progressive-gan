@@ -21,19 +21,22 @@ class SDTProgressive(BaseModel):
     def __init__(self, opt):
         super(SDTProgressive, self).__init__(opt)
 
+        self.opt = opt
+        self.phase = opt.phase
+        self.ngpu = opt.ngpu
+        self.Tensor = torch.FloatTensor if self.ngpu > 0 else torch.Tensor
+        self.outf = opt.outf
         size = opt.fineSize
         batch_size = opt.batchSize
         self.batch_size = opt.batchSize
         self.input_nc = 3
-        self.output_nc = 4 if self.opt.ov_method == 'channel' else 3
         self.max_resolution = opt.fineSize
         self.stage_interval = opt.stage_interval
         self.max_stage = opt.max_stage
-        self.gpu_ids = opt.gpu_ids
         self._stage = None
 
         self.input_A = self.Tensor(batch_size, self.input_nc, size, size)
-        self.input_B = self.Tensor(batch_size, self.output_nc, size, size)
+        self.input_B = self.Tensor(batch_size, self.input_nc, size, size)
 
         # Note that the base size is 4x4, hence the -2 here
         max_stage = self.resolution_stage(self.max_resolution)
@@ -46,14 +49,14 @@ class SDTProgressive(BaseModel):
 
         self.max_stage = max_stage
 
-        netG = Generator(self.input_nc, self.output_nc, opt.ngf,
+        netG = Generator(self.nz, self.input_nc, opt.ngf,
                               max_stage=self.max_stage)
 
-        gpu_ids = self.gpu_ids if len(self.gpu_ids) > 0 else None
+        gpu_ids = range(self.ngpu) if self.ngpu > 0 else None
         self.netG = nn.parallel.DataParallel(netG, device_ids=gpu_ids)
 
         if not opt.phase == 'test':
-            netD = Discriminator(self.output_nc, opt.ngf,
+            netD = Discriminator(self.output_nc, opt.ndf,
                                  max_stage=self.max_stage)
             self.netD = nn.parallel.DataParallel(netD, device_ids=gpu_ids)
 
@@ -95,8 +98,8 @@ class SDTProgressive(BaseModel):
             self.optimizers.append(self.optimizer_D)
             for optimizer in self.optimizers:
                 self.schedulers.append(
-                    networks.get_scheduler(optimizer, opt,
-                                            self.iter_count))
+                    get_scheduler(optimizer, opt,
+                                  self.iter_count))
 
             self.comparative = opt.comparative
             if self.comparative == "dis":
@@ -386,5 +389,27 @@ class SDTProgressive(BaseModel):
                 flags.update({key: True})
 
         return flags
+
+
+def get_lambda_rule(opt, iter_count):
+    lambda_rule = lambda iteration: 1.0 - max(0, iteration + 1 + iter_count - opt.niter) / float(opt.niter_decay + 1)
+    return lambda_rule
+
+
+def get_scheduler(optimizer, opt, iter_count=1):
+    if opt.lr_policy == 'lambda':
+
+        lambda_rule = get_lambda_rule(opt, iter_count)
+        scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
+    elif opt.lr_policy == 'step':
+        scheduler = lr_scheduler.StepLR(
+            optimizer, step_size=opt.lr_decay_iters, gamma=0.1)
+    elif opt.lr_policy == 'plateau':
+        scheduler = lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode='min', factor=0.2, threshold=0.01, patience=5)
+    else:
+        return NotImplementedError(
+            'learning rate policy [%s] is not implemented', opt.lr_policy)
+    return scheduler
 
 
