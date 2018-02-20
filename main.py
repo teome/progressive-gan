@@ -14,7 +14,7 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 from torch.autograd import Variable
 
-from .sdt_progressive import SDTProgressive
+from sdt_progressive import SDTProgressive
 
 
 def main(opt):
@@ -77,29 +77,47 @@ def main(opt):
     n_examples = len(dataloader)
     iteration = model.iter_count
     logger = Logger()
+
+    _data_iterator = None
+    def get_batch():
+        tries = 0
+        while tries < 2:
+            if _data_iterator:
+                try:
+                    data = next(_data_iterator)
+                    return
+                except StopIteration:
+                    pass
+            _data_iterator = iter(dataloader)
+            tries += 1
+        raise RuntimeError('failed to load data from dataloader')
+
     training_start_time = time.time()
-    while iteration < opt.niter:
-        for data in dataloader:
+    while model.iter_count < opt.niter:
+        for iter_dis in range(opt.n_dis):
+            real_cpu, _ = get_batch()
+            model.update_discriminator(real_cpu)
 
-            real_cpu, _ = data
-            model.update(real_cpu)
+        for iter_gen in range(opt.n_gen):
+            model.update_generator()
 
-            iterp1 = iteration + 1
-            if iterp1 % opt.train_log_freq == 0:
-                errors = model.get_current_errors()
-                logger.print_current_errors_csv(iteration, errors)
+        model.iter_count += 1
 
-            if iterp1 % opt.model_save_freq == 0:
-                model.save('%06d' % i)
-            if iterp1 % opt.image_save_freq == 0:
-                model.generate_images()
-            if iterp1 % opt.print_iter_freq == 0:
-                print('End of iteration %d / %d \t %.3f sec/iter' %
-                    (iteration, opt.niter + opt.niter_decay,
-                    (time.time() - training_start_time) / (iterp1)))
+        iteration = model.iter_count
+        iterp1 = iteration + 1
+        if iterp1 % opt.train_log_freq == 0:
+            errors = model.get_current_errors()
+            logger.print_current_errors_csv(iteration, errors)
+        if iterp1 % opt.model_save_freq == 0:
+            model.save('%06d' % iteration)
+        if iterp1 % opt.image_save_freq == 0:
+            model.generate_images()
+        if iterp1 % opt.print_iter_freq == 0:
+            print('End of iteration %d / %d \t %.3f sec/iter' %
+                (iteration, opt.niter + opt.niter_decay,
+                (time.time() - training_start_time) / (iterp1)))
 
-            model.update_learning_rate()
-            iteration += 1
+        model.update_learning_rate()
 
 
 class Logger():
@@ -126,11 +144,11 @@ class Logger():
 
 
 
-class Args(object):
+class Args:
     def __init__(self, default=False):
-        self._parser = argparse.ArgumentParser()
-        parser.add_argument('--dataset', required=True, help='cifar10 | lsun | imagenet | folder | lfw | fake')
-        parser.add_argument('--dataroot', required=True, help='path to dataset')
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--dataset', type=str, default='folder', help='cifar10 | lsun | imagenet | folder | lfw | fake')
+        parser.add_argument('--dataroot', type=str, default='dataroot', help='path to dataset')
         parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
         parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
         parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
@@ -140,6 +158,8 @@ class Args(object):
         parser.add_argument('--ndf', type=int, default=64)
         parser.add_argument('--niter', type=int, default=10000, help='number of iterations to train for')
         parser.add_argument('--niter-decay', type=int, default=200, help='number of iterations to decay learning rate')
+        parser.add_argument('--n_gen', type=int, default=1, help='number of generator updates per discriminator')
+        parser.add_argument('--n_dis', type=int, default=1, help='number of discriminator updates per discriminator')
         parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
         parser.add_argument('--lr-policy', type=str, default='lambda', help='lr scheduler policy')
         parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
@@ -160,10 +180,17 @@ class Args(object):
         parser.add_argument('--comp-const', type=str, default='1/1', help='G/D training period')
         parser.add_argument('--killer', action='store_true')
 
+        self._parser = parser
         if default:
-            self._args = self._parser.parse([])
+            self._args = self._parser.parse_args([])
         else:
-            self._args = self._parser.parse()
+            self._args = self._parser.parse_args()
+
+        if not (self._args.n_gen == 1 or self._args.n_dis == 1):
+            raise RuntimeError('invalid combination of n_gen and n_dis -- one must take the value \'1\'')
+
+        if not os.path.isdir(self._args.dataroot):
+            raise RuntimeError('argument \'dataroot\' is not a directory')
 
     @property
     def args(self):
@@ -176,43 +203,7 @@ class Args(object):
 
 
 if __name__ == "__main__":
-
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('--dataset', required=True, help='cifar10 | lsun | imagenet | folder | lfw | fake')
-    # parser.add_argument('--dataroot', required=True, help='path to dataset')
-    # parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
-    # parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
-    # parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
-    # parser.add_argument('--fineSize', type=int, default=None, help='the height / width of the input image to network')
-    # parser.add_argument('--nz', type=int, default=100, help='size of the latent z vector')
-    # parser.add_argument('--ngf', type=int, default=64)
-    # parser.add_argument('--ndf', type=int, default=64)
-    # parser.add_argument('--niter', type=int, default=10000, help='number of iterations to train for')
-    # parser.add_argument('--niter-decay', type=int, default=200, help='number of iterations to decay learning rate')
-    # parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
-    # parser.add_argument('--lr-policy', type=str, default='lambda', help='lr scheduler policy')
-    # parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
-    # parser.add_argument('--WGAN-GP_gamma', type=float, default=1.0, help='WGAN-GP gamma')
-    # parser.add_argument('--WGAN-GP_lambda', type=float, default=1.0, help='WGAN-GP lambda')
-    # parser.add_argument('--pooling-comp', type=float, default=1.0, help='avg pooling comp')
-    # parser.add_argument('--cuda', action='store_true', help='enables cuda')
-    # parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
-    # parser.add_argument('--netG', default='', help="path to netG (to continue training)")
-    # parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-    # parser.add_argument('--outf', default='.', help='folder to output images and model checkpoints')
-    # parser.add_argument('--manualSeed', type=int, help='manual seed')
-    # parser.add_argument('--auto-continue', action='store_true', help='auto continue training')
-    # parser.add_argument('--continue-train', action='store_true', help='continue from specified epoch')
-    # parser.add_argument('--which-epoch', type=int, default=None, help='epoch for continuation of training')
-    # parser.add_argument('--model-save-freq', type=int, default=100, help='frequency to save model')
-    # parser.add_argument('--image-save-freq', type=int, default=100, help='frequency to save images')
-    # parser.add_argument('--comp-const', type=str, default='1/1', help='G/D training period')
-    # parser.add_argument('--killer', action='store_true')
-
-
-    # opt = parser.parse_args()
-
-    args = Args().args
+    opt = Args().args
 
     if opt.killer:
         import signal

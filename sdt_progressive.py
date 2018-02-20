@@ -9,13 +9,10 @@ from collections import OrderedDict
 from torch.nn import init
 from torch.autograd import Variable, grad
 from torch.optim import lr_scheduler
-from . import networks
-from .base_model import BaseModel
-from .progressive_generator import Generator, Discriminator
-import util.util as util
+from progressive_generator import Generator, Discriminator
 
 
-class SDTProgressive(BaseModel):
+class SDTProgressive:
     def name(self):
         return 'SDTProgressive'
 
@@ -132,6 +129,125 @@ class SDTProgressive(BaseModel):
 
     def resolution_stage(self, resol):
         return 2 * (np.log2(resol) - 2)
+
+    def update_discriminator(self, x_real_cpu):
+        stage = self.stage
+        max_resol = self.max_resolution
+
+        if self.ngpu > 0:
+            x_real_cpu = x_real_cpu.cuda()
+
+        self.input.resize_as_(x_real_cpu).copy_(x_real_cpu)
+        x_real = Variable(self.input)
+
+        if (math.floor(stage) & 1) == 0:
+            # Fixed stage
+            resol = self.stage_resolution(math.floor(stage) + 1)
+            scale = max(1, max_resol // resol)
+            if scale > 1:
+                x_real = F.avg_pool2d(x_real, scale, scale, 0)
+        else:
+            # Fade stage
+            alpha = stage - math.floor(stage)
+            resol_low = self.stage_resolution(math.floor(stage))
+            resol_high = self.stage_resolution(math.floor(stage) + 1)
+            scale_low = max(1, max_resol // resol_low)
+            scale_high = max(1, max_resol // resol_high)
+            if scale_low > 1:
+                x_real_low = F.upsample(
+                    F.avg_pool2d(x_real, scale_low, scale_low, 0),
+                    size=(resol_high, resol_high))
+                x_real_high = F.avg_pool2d(
+                    x_real, scale_high, scale_high, 0)
+                x_real = (1 - alpha) * x_real_low + alpha * x_real_high
+
+        self.x_real = x_real
+
+        self.optimizer_D.zero_grad()
+
+        y_real = self.netD.forward(x_real, stage=staget)
+        self.pred_real = y_real
+        loss_d_real = y_real.mean()
+        loss_d_real.backward(self.mone)
+
+        # Fake samples
+        z = self.netG.sample_latent(x_real.shape[0])
+        z = Variable(z)
+        x_fake = self.netG(z, stage=staget)
+        self.x_fake = x_fake
+        y_fake = self.netD(x_fake.detach(), stage=staget)
+        self.pred_fake = y_fake
+        loss_d_fake = y_fake.mean()
+        loss_d_fake.backward(self.one)
+        loss_d = loss_d_fake - loss_d_real
+
+        if self.phase == 'train' or self.phase == 'eval':
+            eps = torch.rand([x_real.size(0)] + [1] * (x_real.dim() - 1)).type_as(x_real.data)
+
+            x_interp = eps * x_real.data + (1.0 - eps) * x_fake.data
+            x_interp = Variable(x_interp, requires_grad=True)
+            y_interp = self.netD(x_interp, stage=staget)
+
+            dy_interp = grad(
+                    outputs=y_interp,
+                    inputs=x_interp,
+                    grad_outputs=torch.ones(y_interp.size()) if self.ngpu < 1 else torch.ones(y_interp.size()).cuda(),
+                    create_graph=True,
+                    retain_graph=True,
+                    only_inputs=True)[0]
+            dy_interp = dy_interp.view(dy_interp.size(0), -1)
+
+            dy_interp = dy_interp.norm(2, dim=1)
+            # Two-sided gradient penalty
+            gamma = self.opt.WGAN_GP_gamma
+            penalty = F.mse_loss(
+                dy_interp,
+                Variable(gamma * torch.ones_like(dy_interp.data).type_as(dy_interp.data))
+                ) * (1.0 / gamma**2)
+            loss_d_gp = penalty
+        else:
+            loss_d_gp = Variable(self.Tensor([0]))
+
+
+        # gradient penalty plus loss for parameter drift
+        loss_d_penalty = loss_d_gp + 0.001 * (y_real * y_real).mean()
+        loss_d_penalty.backward()
+        loss_d += loss_d_penalty
+
+        if self.phase == 'train':
+            # self.loss_D.backward()
+            # loss_d.backward()
+            self.optimizer_D.step()
+
+        log_losses = dict(
+            loss_d=loss_d.data[0],
+            loss_d_real=loss_d_real.data[0],
+            loss_d_fake=loss_d_fake.data[0],
+            loss_d_gp=loss_d_gp.data[0]
+        )
+        if not self._logs:
+            self._logs = self._empty_log()
+        self._logs.update(log_losses)
+
+    def update_generator(self):
+        self.optimizer_G.zero_grad()
+        # Fake samples
+        z = self.netG.sample_latent(x_real.shape[0])
+        z = Variable(z)
+        x_fake = self.netG(z, stage=staget)
+        self.x_fake = x_fake
+        y_fake = self.netD(x_fake, stage=staget)
+        loss_g = -y_fake.mean()
+        loss_g.backward()
+
+        if self.phase == 'train':
+            # self.loss_G.backward()
+            # loss_g.backward()
+            self.optimizer_G.step()
+
+        if not self._logs:
+            self._logs = self._empty_log()
+        self._logs.update({'loss_g':loss_g.data[0]})
 
     def update(self, x_real_cpu):
         stage = self.stage
@@ -259,9 +375,6 @@ class SDTProgressive(BaseModel):
             log_losses.update({'loss_g':0.0})
         self.log_losses = log_losses
 
-        if self.phase == 'train':
-            self.iter_count += 1
-
     def optimize_parameters(self):
         self.update()
 
@@ -382,6 +495,15 @@ class SDTProgressive(BaseModel):
         if not self.phase == 'test':
             self.netD.train()
 
+    def _empty_log(self):
+        return OrderedDict([
+            ('G', 0.),
+            ('D_real', 0.),
+            ('D_fake', 0.),
+            ('D_GP', 0.),
+            ('D', 0.),
+        ])
+
     def get_current_errors(self):
         return OrderedDict([
             ('G', self.log_losses['loss_g']),
@@ -402,16 +524,16 @@ class SDTProgressive(BaseModel):
                 '%s/fake_samples_epoch_%06d.png' % (opt.outf, self.iter_count),
                 normalize=True)
 
-    def get_current_visuals(self):
-        visuals = []
-        for b in range(self.real_A.size()[0]):
-            real_A = util.tensor2im(self.real_A[b].data)
-            fake_B = util.tensor2im(self.fake_B[b].data)
-            real_B = util.tensor2im(self.real_B[b].data)
-            visuals.append(
-                OrderedDict([('real_A', real_A), ('fake_B', fake_B),
-                             ('real_B', real_B)]))
-        return visuals
+    # def get_current_visuals(self):
+    #     visuals = []
+    #     for b in range(self.real_A.size()[0]):
+    #         real_A = util.tensor2im(self.real_A[b].data)
+    #         fake_B = util.tensor2im(self.fake_B[b].data)
+    #         real_B = util.tensor2im(self.real_B[b].data)
+    #         visuals.append(
+    #             OrderedDict([('real_A', real_A), ('fake_B', fake_B),
+    #                          ('real_B', real_B)]))
+    #     return visuals
 
     def save(self, label):
         self.save_network(self.netG, 'G', label)
