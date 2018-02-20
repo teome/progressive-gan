@@ -165,9 +165,6 @@ class SDTProgressive(BaseModel):
                 x_real = (1 - alpha) * x_real_low + alpha * x_real_high
 
         self.x_real = x_real
-        # all inputs must be a tensor for data_parallel
-        staget = self.Tensor([stage])
-
         train_flags = self.should_train()
 
         if train_flags['D'] and self.phase != 'test':
@@ -289,7 +286,11 @@ class SDTProgressive(BaseModel):
         raise NotImplementedError
         with torch.no_grad():
             self.real_A = Variable(self.input_A)
-            self.fake_B = self.netG.forward(self.real_A)
+            z = self.netG.sample_latent(x_real.shape[0])
+            z = Variable(z)
+            self.fake_B = self.netG.forward(
+                z,
+                Variable(self.Tensor([self.stage])))
             self.real_B = Variable(self.input_B)
 
     def get_image_paths(self):
