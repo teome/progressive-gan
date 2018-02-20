@@ -47,12 +47,15 @@ class SDTProgressive:
 
         netG = Generator(self.nz, self.input_nc, opt.ngf,
                          max_stage=self.max_stage)
-
+        self.netG = netG
+        self.netD = None
         if not opt.phase == 'test':
             netD = Discriminator(self.output_nc, opt.ndf,
                                  max_stage=self.max_stage)
         self.iter_count = self.load_model()
 
+        # Wrap in dataparallel after loading; saved models are unwrapped
+        # and on the cpu
         gpu_ids = range(self.ngpu) if self.ngpu > 0 else None
         self.netG = nn.parallel.DataParallel(netG, device_ids=gpu_ids)
         if not opt.phase == 'test':
@@ -61,8 +64,8 @@ class SDTProgressive:
         # Fixed vector for image generation
         self.real = self.Tensor(batch_size, self.input_nc, size, size)
         self.latent = self.Tensor(batch_size, self.nz, 1, 1)
-        self.latent_fixed = self.Tensor(batch_size, self.nz, 1, 1)
         latent_fixed = self.netG.module.sample_latent(self.batch_size)
+        self.latent_fixed = self.Tensor(batch_size, self.nz, 1, 1)
         self.latent_fixed.copy_(latent_fixed if self.ngpu < 1 else
                                 latent_fixed.cuda())
         self.one = self.Tensor([1])
@@ -94,13 +97,6 @@ class SDTProgressive:
                 self.schedulers.append(
                     get_scheduler(optimizer, opt,
                                   self.iter_count))
-
-            self.comparative = 'freq'
-            consts = [int(c) for c in opt.comp_const.split("/")]
-            self.comp_const = {
-                'G': consts[0],
-                'D': consts[1],
-            }
 
         print('---------- Networks initialized -------------')
         if opt.print_network:
@@ -505,6 +501,7 @@ class SDTProgressive:
         ])
 
     def get_current_errors(self):
+        return self._logs if self._logs else self._empty_log()
         return OrderedDict([
             ('G', self.log_losses['loss_g']),
             ('D_real', self.log_losses['loss_d_real']),
@@ -543,8 +540,14 @@ class SDTProgressive:
         """Return a list (G, D_A, D_B) of flags, e.g. [0, 1, 0] means only D_A
         should be trained."""
 
+        # backwards compatability
+        if not hasattr(self, self.comp_const):
+            comp_const = {'G':1, 'D':1}
+        else:
+            comp_const = self.comp_const
+
         flags = {}
-        for key, const in self.comp_const.items():
+        for key, const in comp_const:
             if self.comparative == "freq":
                 flags.update({key: (self.iter_count % const == 0)})
             else:
