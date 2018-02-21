@@ -1,0 +1,8 @@
+*.py[cod]
+__pycache__
+*.bak
+.idea/
+.project
+
+*.test_output
+logs*/
