@@ -187,6 +187,8 @@ def parse_args(default=False):
     parser.add_argument('--auto-continue', action='store_true', help='auto continue training')
     parser.add_argument('--continue-train', action='store_true', help='continue from specified epoch')
     parser.add_argument('--which-epoch', type=int, default=None, help='epoch for continuation of training')
+    parser.add_argument('--train-log-freq', type=int, default=100, help='frequency to log')
+    parser.add_argument('--print-iter-freq', type=int, default=100, help='frequency to log')
     parser.add_argument('--model-save-freq', type=int, default=100, help='frequency to save model')
     parser.add_argument('--image-save-freq', type=int, default=100, help='frequency to save images')
     parser.add_argument('--comp-const', type=str, default='1/1', help='G/D training period')

@@ -149,10 +149,10 @@ class Generator(nn.Module):
             x1 = out_curr(b_curr(h))
 
             alpha_v = Variable(
-                torch.FloatTensor([alpha]).type_as(x.data),
+                torch.FloatTensor([alpha]).type_as(x0.data),
                 requires_grad=False)
             oneminalpha_v = Variable(
-                torch.FloatTensor([1. - alpha]).type_as(x.data),
+                torch.FloatTensor([1. - alpha]).type_as(x0.data),
                 requires_grad=False)
             x = oneminalpha_v * x0 + alpha_v * x1
 
