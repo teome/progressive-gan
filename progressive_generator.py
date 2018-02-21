@@ -24,7 +24,7 @@ class EqualizedConv2d(nn.Module):
         init.normal(self.c.weight.data, 0.0, 1.0)
 
     def forward(self, x):
-        return self.c(Variable(self.inv_c.type_as(x)) * x)
+        return self.c(Variable(self.inv_c.type_as(x.data)) * x)
 
 class EqualizedLinear(nn.Module):
     def __init__(self, in_ch, out_ch):
@@ -37,7 +37,7 @@ class EqualizedLinear(nn.Module):
         # !!! TODO Init bias?
 
     def forward(self, x):
-        return self.c(Variable(self.inv_c.type_as(x)) * x)
+        return self.c(Variable(self.inv_c.type_as(x.data)) * x)
 
 
 def minibatch_std(x):
@@ -83,7 +83,7 @@ class GenUpBlock(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, nz, out_ch, ngf, max_stage=12,
+    def __init__(self, nz, ngf, max_stage=12,
                  pooling_comp=1.0):
         super(Generator, self).__init__()
         # super().__init__()
@@ -91,9 +91,8 @@ class Generator(nn.Module):
         self.pooling_comp = pooling_comp
         self.nz = nz
 
-        # !!! TODO check indexing from 1 not 0
-        self.c0 = GenUpBlock(nz, ngf, 4, 1, 3)
-        self.c1 = GenUpBlock(ngf, ngf, 3, 1, 1)
+        self.c0 = EqualizedConv2d(nz, ngf, 4, 1, 3)
+        self.c1 = EqualizedConv2d(ngf, ngf, 3, 1, 1)
         self.out0 = EqualizedConv2d(ngf, 3, 1, 1, 0)
 
         self.b1 = GenUpBlock(ngf, ngf)
@@ -110,15 +109,18 @@ class Generator(nn.Module):
         self.out6 = EqualizedConv2d(ngf // 2, 3, 1, 1, 0)
 
     def sample_latent(self, batch_size):
-        z = torch.FloatTensor(batch_size, nz, 1, 1).normal_(0, 1)
+        z = torch.FloatTensor(batch_size, self.nz, 1, 1).normal_(0, 1)
         z /= z.norm(2) + 1e-8
         return z
 
-    def forward(self, x, stage):
+    def forward(self, z, stage):
         # int0->db0->  eb0>out0
         # (1-a)*(down->in0) + (a)*(in1->db1) ->db0 ->  eb0> (1-a) * (up->out0) + a*(eb1->out1)
         # in1->db1->db0->eb0->eb1->out1
         # ...
+        if torch.is_tensor(stage):
+            stage = stage[0]
+
         stage = min(stage, self.max_stage)
         alpha = stage - math.floor(stage)
         stage = math.floor(stage)
@@ -147,10 +149,10 @@ class Generator(nn.Module):
             x1 = out_curr(b_curr(h))
 
             alpha_v = Variable(
-                torch.FloatTensor([alpha]).type_as(x),
+                torch.FloatTensor([alpha]).type_as(x.data),
                 requires_grad=False)
             oneminalpha_v = Variable(
-                torch.FloatTensor([1. - alpha]).type_as(x),
+                torch.FloatTensor([1. - alpha]).type_as(x.data),
                 requires_grad=False)
             x = oneminalpha_v * x0 + alpha_v * x1
 
@@ -198,25 +200,24 @@ class DiscriminatorBlock(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, in_ch=3, ndf=512, max_stage=12,
-                 pooling_comp=1.0):
+    def __init__(self, ndf=512, max_stage=12, pooling_comp=1.0):
         super(Discriminator, self).__init__()
         self.max_stage = max_stage
         self.pooling_comp = pooling_comp
 
-        self.in6 = EqualizedConv2d(in_ch, ndf // 2, 1, 1, 0)
+        self.in6 = EqualizedConv2d(3, ndf // 2, 1, 1, 0)
         self.b6 = DiscriminatorBlock(ndf // 2, ndf, pooling_comp)
-        self.in5 = EqualizedConv2d(in_ch, ndf, 1, 1, 0)
+        self.in5 = EqualizedConv2d(3, ndf, 1, 1, 0)
         self.b5 = DiscriminatorBlock(ndf, ndf, pooling_comp)
-        self.in4 = EqualizedConv2d(in_ch, ndf, 1, 1, 0)
+        self.in4 = EqualizedConv2d(3, ndf, 1, 1, 0)
         self.b4 = DiscriminatorBlock(ndf, ndf, pooling_comp)
-        self.in3 = EqualizedConv2d(in_ch, ndf, 1, 1, 0)
+        self.in3 = EqualizedConv2d(3, ndf, 1, 1, 0)
         self.b3 = DiscriminatorBlock(ndf, ndf, pooling_comp) # Input Nxndfx32x32
-        self.in2 = EqualizedConv2d(in_ch, ndf, 1, 1, 0)
+        self.in2 = EqualizedConv2d(3, ndf, 1, 1, 0)
         self.b2 = DiscriminatorBlock(ndf, ndf, pooling_comp)
-        self.in1 = EqualizedConv2d(in_ch, ndf, 1, 1, 0)
+        self.in1 = EqualizedConv2d(3, ndf, 1, 1, 0)
         self.b1 = DiscriminatorBlock(ndf, ndf, pooling_comp)
-        self.in0 = EqualizedConv2d(in_ch, ndf, 1, 1, 0)
+        self.in0 = EqualizedConv2d(3, ndf, 1, 1, 0)
         # Differs from generator whindf grows from 0
 
         # Shape here [Bx4x4x4]
@@ -225,6 +226,9 @@ class Discriminator(nn.Module):
         self.out2 = EqualizedLinear(ndf, 1)
 
     def forward(self, x, stage):
+        if torch.is_tensor(stage):
+            stage = stage[0]
+
         stage = min(stage, self.max_stage)
         alpha = stage - math.floor(stage)
         stage = math.floor(stage)
@@ -244,10 +248,10 @@ class Discriminator(nn.Module):
             h1 = b1(F.leaky_relu(fromRGB1(x)))
 
             alpha_v = Variable(
-                torch.FloatTensor([alpha]).type_as(x),
+                torch.FloatTensor([alpha]).type_as(x.data),
                 requires_grad=False)
             oneminalpha_v = Variable(
-                torch.FloatTensor([1. - alpha]).type_as(x),
+                torch.FloatTensor([1. - alpha]).type_as(x.data),
                 requires_grad=False)
 
             h = oneminalpha_v * h0 + alpha_v * h1

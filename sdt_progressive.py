@@ -17,7 +17,7 @@ class SDTProgressive:
         return 'SDTProgressive'
 
     def __init__(self, opt):
-        super(SDTProgressive, self).__init__(opt)
+        # super(SDTProgressive, self).__init__(opt)
 
         self.opt = opt
         self.phase = opt.phase
@@ -26,10 +26,12 @@ class SDTProgressive:
         self.outf = opt.outf
         self.batch_size = opt.batchSize
         self.input_nc = 3
+        self.nz = opt.nz
         self.max_resolution = opt.fineSize
         self.stage_interval = opt.stage_interval
         self.max_stage = opt.max_stage
         self._stage = None
+        self._losses = self._empty_losses()
 
         size = opt.fineSize
         batch_size = opt.batchSize
@@ -45,13 +47,11 @@ class SDTProgressive:
 
         self.max_stage = max_stage
 
-        netG = Generator(self.nz, self.input_nc, opt.ngf,
-                         max_stage=self.max_stage)
+        netG = Generator(self.nz, opt.ngf, max_stage=self.max_stage)
         self.netG = netG
         self.netD = None
         if not opt.phase == 'test':
-            netD = Discriminator(self.output_nc, opt.ndf,
-                                 max_stage=self.max_stage)
+            netD = Discriminator(opt.ndf, max_stage=self.max_stage)
         self.iter_count = self.load_model()
 
         # Wrap in dataparallel after loading; saved models are unwrapped
@@ -62,14 +62,14 @@ class SDTProgressive:
             self.netD = nn.parallel.DataParallel(netD, device_ids=gpu_ids)
 
         # Fixed vector for image generation
-        self.real = self.Tensor(batch_size, self.input_nc, size, size)
+        self.input = self.Tensor(batch_size, self.input_nc, size, size)
         self.latent = self.Tensor(batch_size, self.nz, 1, 1)
         latent_fixed = self.netG.module.sample_latent(self.batch_size)
         self.latent_fixed = self.Tensor(batch_size, self.nz, 1, 1)
         self.latent_fixed.copy_(latent_fixed if self.ngpu < 1 else
                                 latent_fixed.cuda())
         self.one = self.Tensor([1])
-        self.mone = one * -1
+        self.mone = self.one * -1
 
         self.old_lr = opt.lr
 
@@ -128,6 +128,8 @@ class SDTProgressive:
 
     def update_discriminator(self, x_real_cpu):
         stage = self.stage
+        # Data parallel requires tensors for all args
+        staget = self.Tensor([stage])
         max_resol = self.max_resolution
 
         if self.ngpu > 0:
@@ -164,10 +166,10 @@ class SDTProgressive:
         y_real = self.netD.forward(x_real, stage=staget)
         self.pred_real = y_real
         loss_d_real = y_real.mean()
-        loss_d_real.backward(self.mone)
+        loss_d_real.backward(self.mone, retain_graph=True)
 
         # Fake samples
-        z = self.netG.sample_latent(x_real.shape[0])
+        z = self.netG.module.sample_latent(x_real.shape[0])
         z = Variable(z)
         x_fake = self.netG(z, stage=staget)
         self.x_fake = x_fake
@@ -202,6 +204,7 @@ class SDTProgressive:
                 ) * (1.0 / gamma**2)
             loss_d_gp = penalty
         else:
+            print('!!!!!!!!!!')
             loss_d_gp = Variable(self.Tensor([0]))
 
 
@@ -211,8 +214,6 @@ class SDTProgressive:
         loss_d += loss_d_penalty
 
         if self.phase == 'train':
-            # self.loss_D.backward()
-            # loss_d.backward()
             self.optimizer_D.step()
 
         log_losses = dict(
@@ -221,14 +222,14 @@ class SDTProgressive:
             loss_d_fake=loss_d_fake.data[0],
             loss_d_gp=loss_d_gp.data[0]
         )
-        if not self._logs:
-            self._logs = self._empty_log()
-        self._logs.update(log_losses)
+        self._losses.update(log_losses)
 
     def update_generator(self):
+        # Data parallel requires tensors for all args
+        staget = self.Tensor([self.stage])
         self.optimizer_G.zero_grad()
         # Fake samples
-        z = self.netG.sample_latent(x_real.shape[0])
+        z = self.netG.module.sample_latent(self.batch_size)
         z = Variable(z)
         x_fake = self.netG(z, stage=staget)
         self.x_fake = x_fake
@@ -237,16 +238,14 @@ class SDTProgressive:
         loss_g.backward()
 
         if self.phase == 'train':
-            # self.loss_G.backward()
-            # loss_g.backward()
             self.optimizer_G.step()
 
-        if not self._logs:
-            self._logs = self._empty_log()
-        self._logs.update({'loss_g':loss_g.data[0]})
+        self._losses.update({'loss_g':loss_g.data[0]})
 
     def update(self, x_real_cpu):
         stage = self.stage
+        # Data parallel requires tensors for all args
+        staget = self.Tensor([stage])
         max_resol = self.max_resolution
 
         if self.ngpu > 0:
@@ -288,7 +287,7 @@ class SDTProgressive:
             loss_d_real.backward(self.mone)
 
             # Fake samples
-            z = self.netG.sample_latent(x_real.shape[0])
+            z = self.netG.module.sample_latent(x_real.shape[0])
             z = Variable(z)
             x_fake = self.netG(z, stage=staget)
             self.x_fake = x_fake
@@ -353,7 +352,7 @@ class SDTProgressive:
         if train_flags['G']:
             self.optimizer_G.zero_grad()
             # Fake samples
-            z = self.netG.sample_latent(x_real.shape[0])
+            z = self.netG.module.sample_latent(x_real.shape[0])
             z = Variable(z)
             x_fake = self.netG(z, stage=staget)
             self.x_fake = x_fake
@@ -395,7 +394,7 @@ class SDTProgressive:
         raise NotImplementedError
         with torch.no_grad():
             self.real_A = Variable(self.input_A)
-            z = self.netG.sample_latent(x_real.shape[0])
+            z = self.netG.module.sample_latent(x_real.shape[0])
             z = Variable(z)
             self.fake_B = self.netG.forward(
                 z,
@@ -491,7 +490,7 @@ class SDTProgressive:
         if not self.phase == 'test':
             self.netD.train()
 
-    def _empty_log(self):
+    def _empty_losses(self):
         return OrderedDict([
             ('G', 0.),
             ('D_real', 0.),
@@ -502,13 +501,6 @@ class SDTProgressive:
 
     def get_current_errors(self):
         return self._logs if self._logs else self._empty_log()
-        return OrderedDict([
-            ('G', self.log_losses['loss_g']),
-            ('D_real', self.log_losses['loss_d_real']),
-            ('D_fake', self.log_losses['loss_d_fake']),
-            ('D_GP', self.log_losses['loss_d_gp']),
-            ('D', self.log_losses['loss_d']),
-        ])
 
     def generate_images(self, n=None):
         n = n or self.latent_fixed.shape[0]
