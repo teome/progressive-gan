@@ -114,6 +114,7 @@ def main(opt):
         if iterp1 % opt.train_log_freq == 0:
             errors = model.get_current_errors()
             logger.print_current_errors_csv(iteration, errors)
+            model.write_summaries()
         if iterp1 % opt.model_save_freq == 0:
             model.save('%06d' % iteration)
         if iterp1 % opt.image_save_freq == 0:

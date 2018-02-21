@@ -13,6 +13,13 @@ from torch.autograd import Variable, grad
 from torch.optim import lr_scheduler
 from progressive_generator import Generator, Discriminator
 
+try:
+    from tensorboardX import SummaryWriter
+    has_tb = True
+except:
+    print('Failed to import tensorboardX, no logging possible')
+    has_tb = False
+
 
 class SDTProgressive:
     def name(self):
@@ -26,6 +33,7 @@ class SDTProgressive:
         self.ngpu = opt.ngpu
         self.Tensor = torch.cuda.FloatTensor if self.ngpu > 0 else torch.FloatTensor
         self.outf = opt.outf
+        self.name = opt.name
         self.batch_size = opt.batchSize
         self.input_nc = 3
         self.nz = opt.nz
@@ -34,7 +42,8 @@ class SDTProgressive:
         self.max_stage = opt.max_stage
         self._stage = None
         self._losses = self._empty_losses()
-
+        if has_tb:
+            self._writer = SummaryWriter
         size = opt.fineSize
         batch_size = opt.batchSize
 
@@ -503,6 +512,10 @@ class SDTProgressive:
     def get_current_errors(self):
         return self._losses if self._losses else self._empty_losses()
 
+    def write_summaries(self):
+        if not has_tb:
+            return
+        self.netD
     def generate_images(self, n=None):
         n = n or self.latent_fixed.shape[0]
         vutils.save_image(
@@ -528,22 +541,10 @@ class SDTProgressive:
         loss = self.netD.forward(fake, stage=staget)
         loss.mean().backward()
         salience = fake.grad.data
-        print('salience', salience.shape)
         vutils.save_image(
             salience,
             '%s/salience_samples_iter_%06d.png' % (self.outf, self.iter_count),
             normalize=True)
-
-    # def get_current_visuals(self):
-    #     visuals = []
-    #     for b in range(self.real_A.size()[0]):
-    #         real_A = util.tensor2im(self.real_A[b].data)
-    #         fake_B = util.tensor2im(self.fake_B[b].data)
-    #         real_B = util.tensor2im(self.real_B[b].data)
-    #         visuals.append(
-    #             OrderedDict([('real_A', real_A), ('fake_B', fake_B),
-    #                          ('real_B', real_B)]))
-    #     return visuals
 
     def save(self, label):
         self.save_network(self.netG, 'G', label)
