@@ -5,6 +5,8 @@ import numpy as np
 import torchvision as tv
 import torchvision.utils as vutils
 import math
+import glob
+import os
 from collections import OrderedDict
 from torch.nn import init
 from torch.autograd import Variable, grad
@@ -22,7 +24,7 @@ class SDTProgressive:
         self.opt = opt
         self.phase = opt.phase
         self.ngpu = opt.ngpu
-        self.Tensor = torch.FloatTensor if self.ngpu > 0 else torch.Tensor
+        self.Tensor = torch.cuda.FloatTensor if self.ngpu > 0 else torch.FloatTensor
         self.outf = opt.outf
         self.batch_size = opt.batchSize
         self.input_nc = 3
@@ -52,6 +54,7 @@ class SDTProgressive:
         self.netD = None
         if not opt.phase == 'test':
             netD = Discriminator(opt.ndf, max_stage=self.max_stage)
+            self.netD = netD
         self.iter_count = self.load_model()
 
         # Wrap in dataparallel after loading; saved models are unwrapped
@@ -129,13 +132,13 @@ class SDTProgressive:
     def update_discriminator(self, x_real_cpu):
         stage = self.stage
         # Data parallel requires tensors for all args
-        staget = self.Tensor([stage])
+        staget = Variable(self.Tensor([stage]))
         max_resol = self.max_resolution
 
         if self.ngpu > 0:
             x_real_cpu = x_real_cpu.cuda()
 
-        self.input.resize_as_(x_real_cpu).copy_(x_real_cpu)
+        self.input.resize_(x_real_cpu.size()).copy_(x_real_cpu)
         x_real = Variable(self.input)
 
         if (math.floor(stage) & 1) == 0:
@@ -166,7 +169,7 @@ class SDTProgressive:
         y_real = self.netD.forward(x_real, stage=staget)
         self.pred_real = y_real
         loss_d_real = y_real.mean()
-        loss_d_real.backward(self.mone, retain_graph=True)
+        x_real.requires_grad and loss_d_real.backward(self.mone, retain_graph=True)
 
         # Fake samples
         z = self.netG.module.sample_latent(x_real.shape[0])
@@ -176,13 +179,14 @@ class SDTProgressive:
         y_fake = self.netD(x_fake.detach(), stage=staget)
         self.pred_fake = y_fake
         loss_d_fake = y_fake.mean()
-        loss_d_fake.backward(self.one)
+        x_real.requires_grad and loss_d_fake.backward(self.one)
         loss_d = loss_d_fake - loss_d_real
 
         if self.phase == 'train' or self.phase == 'eval':
             eps = torch.rand([x_real.size(0)] + [1] * (x_real.dim() - 1)).type_as(x_real.data)
+            onemineps = torch.ones_like(eps).type_as(x_real.data) - eps
 
-            x_interp = eps * x_real.data + (1.0 - eps) * x_fake.data
+            x_interp = eps * x_real.data + onemineps * x_fake.data
             x_interp = Variable(x_interp, requires_grad=True)
             y_interp = self.netD(x_interp, stage=staget)
 
@@ -204,13 +208,12 @@ class SDTProgressive:
                 ) * (1.0 / gamma**2)
             loss_d_gp = penalty
         else:
-            print('!!!!!!!!!!')
             loss_d_gp = Variable(self.Tensor([0]))
 
 
         # gradient penalty plus loss for parameter drift
         loss_d_penalty = loss_d_gp + 0.001 * (y_real * y_real).mean()
-        loss_d_penalty.backward()
+        x_real.requires_grad and loss_d_penalty.backward()
         loss_d += loss_d_penalty
 
         if self.phase == 'train':
@@ -226,11 +229,11 @@ class SDTProgressive:
 
     def update_generator(self):
         # Data parallel requires tensors for all args
-        staget = self.Tensor([self.stage])
+        staget = Variable(self.Tensor([self.stage]))
         self.optimizer_G.zero_grad()
         # Fake samples
         z = self.netG.module.sample_latent(self.batch_size)
-        z = Variable(z)
+        z = Variable(z.type(self.Tensor))
         x_fake = self.netG(z, stage=staget)
         self.x_fake = x_fake
         y_fake = self.netD(x_fake, stage=staget)
@@ -245,13 +248,13 @@ class SDTProgressive:
     def update(self, x_real_cpu):
         stage = self.stage
         # Data parallel requires tensors for all args
-        staget = self.Tensor([stage])
+        staget = Variable(self.Tensor([stage]))
         max_resol = self.max_resolution
 
         if self.ngpu > 0:
             x_real_cpu = x_real_cpu.cuda()
 
-        self.input.resize_as_(x_real_cpu).copy_(x_real_cpu)
+        self.input.resize_(x_real_cpu.size()).copy_(x_real_cpu)
         x_real = Variable(self.input)
 
         if (math.floor(stage) & 1) == 0:
@@ -299,8 +302,9 @@ class SDTProgressive:
 
             if self.phase == 'train' or self.phase == 'eval':
                 eps = torch.rand([x_real.size(0)] + [1] * (x_real.dim() - 1)).type_as(x_real.data)
+                onemineps = torch.ones_like(eps).type_as(x_real.data) - eps
 
-                x_interp = eps * x_real.data + (1.0 - eps) * x_fake.data
+                x_interp = eps * x_real.data + onemineps * x_fake.data
                 x_interp = Variable(x_interp, requires_grad=True)
                 y_interp = self.netD(x_interp, stage=staget)
 
@@ -411,9 +415,7 @@ class SDTProgressive:
             self.load_network(self.netD, 'D', epoch_label)
 
     def load_model(self):
-
         latest_iter = 0
-
         if self.opt.auto_continue and not self.opt.continue_train and self.phase == 'train':
             last_iters = get_latest_checkpoints(self.opt)
             if last_iters:
@@ -444,13 +446,12 @@ class SDTProgressive:
                 print(e)
                 print('Model load failed from epoch %d.' % iteration)
 
-        iter_count = latest_iter
-        return iter_count
+        return latest_iter
 
     # helper saving function that can be used by subclasses
     def save_network(self, network, network_label, epoch_label):
         save_filename = '%s_net_%s.pth' % (epoch_label, network_label)
-        save_path = os.path.join(self.save_dir, save_filename)
+        save_path = os.path.join(self.outf, save_filename)
         if type(network) == torch.nn.parallel.DataParallel:
             devs = network.device_ids
             net_module = network.module
@@ -465,7 +466,7 @@ class SDTProgressive:
     # helper loading function that can be used by subclasses
     def load_network(self, network, network_label, epoch_label):
         save_filename = '%s_net_%s.pth' % (epoch_label, network_label)
-        save_path = os.path.join(self.save_dir, save_filename)
+        save_path = os.path.join(self.outf, save_filename)
         if type(network) == torch.nn.parallel.DataParallel:
             network.module.load_state_dict(torch.load(save_path))
         else:
@@ -500,18 +501,38 @@ class SDTProgressive:
         ])
 
     def get_current_errors(self):
-        return self._logs if self._logs else self._empty_log()
+        return self._losses if self._losses else self._empty_losses()
 
     def generate_images(self, n=None):
         n = n or self.latent_fixed.shape[0]
-        vutils.save_image(self.input.data[:n],
-                '%s/real_samples.png' % self.opt.outf,
-                normalize=True)
-        fake = self.netG.forward(self.latent_fixed[:n],
-                                 stage=self.Tensor(self.stage))
-        vutils.save_image(fake.data,
-                '%s/fake_samples_epoch_%06d.png' % (opt.outf, self.iter_count),
-                normalize=True)
+        vutils.save_image(
+            self.input[:n],
+            '%s/real_samples.png' % self.opt.outf,
+            normalize=True)
+
+        fake = self.netG.forward(
+            Variable(self.latent_fixed[:n], requires_grad=False),
+            stage=Variable(self.Tensor([self.stage]), requires_grad=False))
+        vutils.save_image(
+            fake.data,
+            '%s/fake_samples_iter_%06d.png' % (self.outf, self.iter_count),
+            normalize=True)
+
+    def generate_saliency(self, n=None):
+        n = n or self.latent_fixed.shape[0]
+        staget = Variable(self.Tensor([self.stage]), requires_grad=False)
+        fake = self.netG.forward(
+            Variable(self.latent_fixed[:n], requires_grad=False),
+            stage=staget)
+        fake = Variable(fake.data, requires_grad=True)
+        loss = self.netD.forward(fake, stage=staget)
+        loss.mean().backward()
+        salience = fake.grad.data
+        print('salience', salience.shape)
+        vutils.save_image(
+            salience,
+            '%s/salience_samples_iter_%06d.png' % (self.outf, self.iter_count),
+            normalize=True)
 
     # def get_current_visuals(self):
     #     visuals = []
@@ -572,8 +593,10 @@ def get_scheduler(optimizer, opt, iter_count=1):
 
 def get_latest_checkpoints(opt):
     chkp_suffix = '_net_D.pth'
-    chkp_pattern = os.path.join(opt.checkpoints_dir, opt.name,
-                                '*%s' % chkp_suffix)
+    if opt.name is not None:
+        chkp_pattern = os.path.join(opt.outf, opt.name, '*%s' % chkp_suffix)
+    else:
+        chkp_pattern = os.path.join(opt.outf, '*%s' % chkp_suffix)
     list_of_files = glob.glob(chkp_pattern)
 
     if len(list_of_files) == 0:

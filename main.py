@@ -1,5 +1,6 @@
 from __future__ import print_function
 import argparse
+import csv
 import os
 import random
 import time
@@ -108,8 +109,6 @@ def main(opt):
         for iter_gen in range(opt.n_gen):
             model.update_generator()
 
-        model.iter_count += 1
-
         iteration = model.iter_count
         iterp1 = iteration + 1
         if iterp1 % opt.train_log_freq == 0:
@@ -119,11 +118,13 @@ def main(opt):
             model.save('%06d' % iteration)
         if iterp1 % opt.image_save_freq == 0:
             model.generate_images()
+            model.generate_saliency()
         if iterp1 % opt.print_iter_freq == 0:
             print('End of iteration %d / %d \t %.3f sec/iter' %
                 (iteration, opt.niter + opt.niter_decay,
                 (time.time() - training_start_time) / (iterp1)))
 
+        model.iter_count += 1
         model.update_learning_rate()
 
 
@@ -131,9 +132,7 @@ class Logger():
     def __init__(self, directory):
         self.directory = directory
         self.log_dir = directory
-        self.img_dir = os.path.join(self.log_dir, 'images')
         os.makedirs(self.log_dir, exist_ok=True)
-        os.makedirs(self.img_dir, exist_ok=True)
 
         # print('create log directory %s...' % self.log_dir)
         self.log_name_csv = os.path.join(self.log_dir, 'loss_log.csv')
@@ -161,7 +160,7 @@ def parse_args(default=False):
     parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
     parser.add_argument('--fineSize', type=int, default=None, help='the height / width of the input image to network')
     parser.add_argument('--loadSize', type=int, default=None, help='the load height / width of the input image')
-    parser.add_argument('--nz', type=int, default=100, help='size of the latent z vector')
+    parser.add_argument('--nz', type=int, default=512, help='size of the latent z vector')
     parser.add_argument('--ngf', type=int, default=64)
     parser.add_argument('--ndf', type=int, default=64)
     parser.add_argument('--niter', type=int, default=10000, help='number of iterations to train for')
@@ -182,7 +181,8 @@ def parse_args(default=False):
     parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
     parser.add_argument('--netG', default='', help="path to netG (to continue training)")
     parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-    parser.add_argument('--outf', default='.', help='folder to output images and model checkpoints')
+    parser.add_argument('--outf', default='logs', help='folder to output images and model checkpoints')
+    parser.add_argument('--name', default=None, help='subfolder within outf for a particular experiment')
     parser.add_argument('--manualSeed', type=int, help='manual seed')
     parser.add_argument('--auto-continue', action='store_true', help='auto continue training')
     parser.add_argument('--continue-train', action='store_true', help='continue from specified epoch')

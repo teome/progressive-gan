@@ -120,6 +120,8 @@ class Generator(nn.Module):
         # ...
         if torch.is_tensor(stage):
             stage = stage[0]
+        if isinstance(stage, Variable):
+            stage = stage.data[0]
 
         stage = min(stage, self.max_stage)
         alpha = stage - math.floor(stage)
@@ -228,6 +230,8 @@ class Discriminator(nn.Module):
     def forward(self, x, stage):
         if torch.is_tensor(stage):
             stage = stage[0]
+        if isinstance(stage, Variable):
+            stage = stage.data[0]
 
         stage = min(stage, self.max_stage)
         alpha = stage - math.floor(stage)
