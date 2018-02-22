@@ -45,7 +45,7 @@ def main(opt):
         dataset = dset.ImageFolder(root=opt.dataroot,
                                 transform=transforms.Compose([
                                     transforms.Resize(opt.loadSize),
-                                    transforms.CenterCrop(opt.imageSize),
+                                    transforms.CenterCrop(opt.fineSize),
                                     transforms.ToTensor(),
                                     # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                 ]))
@@ -53,19 +53,19 @@ def main(opt):
         dataset = dset.LSUN(db_path=opt.dataroot, classes=['bedroom_train'],
                             transform=transforms.Compose([
                                 transforms.Resize(opt.loadSize),
-                                transforms.CenterCrop(opt.imageSize),
+                                transforms.CenterCrop(opt.fineSize),
                                 transforms.ToTensor(),
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                             ]))
     elif opt.dataset == 'cifar10':
         dataset = dset.CIFAR10(root=opt.dataroot, download=True,
                             transform=transforms.Compose([
-                                transforms.Resize(opt.imageSize),
+                                transforms.Resize(opt.fineSize),
                                 transforms.ToTensor(),
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                             ]))
     elif opt.dataset == 'fake':
-        dataset = dset.FakeData(image_size=(3, opt.imageSize, opt.imageSize),
+        dataset = dset.FakeData(image_size=(3, opt.fineSize, opt.fineSize),
                                 transform=transforms.ToTensor())
     assert dataset
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,
