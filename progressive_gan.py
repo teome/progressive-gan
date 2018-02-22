@@ -44,7 +44,7 @@ class ProgressiveGAN:
         self._losses = self._empty_losses()
         if has_tb:
             logdir = os.path.join(opt.outf, opt.name) if opt.name else opt.outf
-            self._writer = SummaryWriter(logdir=logdir)
+            self._writer = SummaryWriter(log_dir=logdir)
         else:
             self._writer = None
         size = opt.fineSize
@@ -151,7 +151,7 @@ class ProgressiveGAN:
             x_real_cpu = x_real_cpu.cuda()
 
         self.input.resize_(x_real_cpu.size()).copy_(x_real_cpu)
-        x_real = Variable(self.input)
+        x_real = Variable(self.input, requires_grad=True)
 
         if (math.floor(stage) & 1) == 0:
             # Fixed stage
@@ -183,20 +183,22 @@ class ProgressiveGAN:
         self.pred_real = y_real
         loss_d_real = y_real.mean()
 
-        if not x_real.requires_grad:
+        if not x_real.requires_grad and args.phase == 'train':
             raise RuntimeError('x_real doesnt require grad')
 
-        x_real.requires_grad and loss_d_real.backward(self.mone, retain_graph=True)
+        if x_real.requires_grad:
+            loss_d_real.backward(self.mone, retain_graph=True)
 
         # Fake samples
         z = self.netG.module.sample_latent(x_real.shape[0])
-        z = Variable(z)
+        z = Variable(z, requires_grad=True)
         x_fake = self.netG(z, staget)
         self.x_fake = x_fake
         y_fake = self.netD(x_fake.detach(), staget)
         self.pred_fake = y_fake
         loss_d_fake = y_fake.mean()
-        x_real.requires_grad and loss_d_fake.backward(self.one)
+        if x_real.requires_grad:
+            loss_d_fake.backward(self.one)
         loss_d = loss_d_fake - loss_d_real
 
         if self.phase == 'train' or self.phase == 'eval':
@@ -229,9 +231,12 @@ class ProgressiveGAN:
 
 
         # gradient penalty plus loss for parameter drift
-        loss_d_penalty = loss_d_gp + 0.001 * (y_real * y_real).mean()
-        x_real.requires_grad and loss_d_penalty.backward()
-        loss_d += loss_d_penalty
+        loss_d_penalty = loss_d_gp
+        loss_d_drift = 0.001 * (y_real * y_real).mean()
+        if x_real.requires_grad:
+            loss_d_penalty.backward()
+            loss_d_drift.backward()
+        loss_d += loss_d_penalty + loss_d_drift
 
         if self.phase == 'train':
             self.optimizer_D.step()
@@ -250,12 +255,13 @@ class ProgressiveGAN:
         self.optimizer_G.zero_grad()
         # Fake samples
         z = self.netG.module.sample_latent(self.batch_size)
-        z = Variable(z.type(self.Tensor))
+        z = Variable(z.type(self.Tensor), requires_grad=True)
         x_fake = self.netG(z, staget)
         self.x_fake = x_fake
         y_fake = self.netD(x_fake, staget)
-        loss_g = -y_fake.mean()
-        loss_g.backward()
+        loss_g = y_fake.mean()
+        if self.phase == 'train' or self.phase == 'eval':
+            loss_g.backward(self.mone)
 
         if self.phase == 'train':
             self.optimizer_G.step()
@@ -532,9 +538,10 @@ class ProgressiveGAN:
             '%s/real_samples.png' % self.opt.outf,
             normalize=True)
 
-        fake = self.netG(
-            Variable(self.latent_fixed[:n], requires_grad=False),
-            Variable(self.Tensor([self.stage] * min(1, self.ngpu)), requires_grad=False))
+        with torch.no_grad():
+            fake = self.netG(
+                Variable(self.latent_fixed[:n]),
+                Variable(self.Tensor([self.stage] * min(1, self.ngpu))))
         vutils.save_image(
             fake.data,
             '%s/fake_samples_iter_%06d.png' % (self.outf, self.iter_count),
@@ -547,9 +554,9 @@ class ProgressiveGAN:
 
     def generate_saliency(self, n=None):
         n = n or self.latent_fixed.shape[0]
-        staget = Variable(self.Tensor([self.stage] * min(1, self.ngpu)), requires_grad=False)
+        staget = Variable(self.Tensor([self.stage] * min(1, self.ngpu)))
         fake = self.netG(
-            Variable(self.latent_fixed[:n], requires_grad=False),
+            Variable(self.latent_fixed[:n]),
             staget)
         fake = Variable(fake.data, requires_grad=True)
         loss = self.netD(fake, staget)
