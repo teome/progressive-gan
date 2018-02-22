@@ -24,7 +24,6 @@ parser.add_argument('--checkpoints-dir', type=str, default=None)
 parser.add_argument('--max-runs', type=int, default=1)
 args, unk = parser.parse_known_args()
 args_dict = vars(args)
-import ipdb; ipdb.set_trace()
 
 # args = opt.parse()
 # args_dict = vars(args)
