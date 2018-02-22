@@ -10,12 +10,26 @@ import argparse
 import numpy as np
 import tempfile
 
-from options.submit_options import SubmitTrainOptions
-opt = SubmitTrainOptions()
+# from options.submit_options import SubmitTrainOptions
+# opt = SubmitTrainOptions()
 
-args = opt.parse()
+parser = argparse.ArgumentParser()
+parser.add_argument('--name', type=str, default=None)
+parser.add_argument('--machine', type=str, default='any')
+parser.add_argument('--num-cpus', type=int, default=None)
+parser.add_argument('--num-gpus', type=int, default=None)
+parser.add_argument('--memory', type=int, default=None)
+parser.add_argument('--project-dir', type=str, default=None)
+parser.add_argument('--checkpoints-dir', type=str, default=None)
+parser.add_argument('--max-runs', type=int, default=1)
+args, unk = parser.parse_known_args()
 args_dict = vars(args)
+import ipdb; ipdb.set_trace()
 
+# args = opt.parse()
+# args_dict = vars(args)
+# import sys
+# argss = 
 
 def tostr(v):
     if isinstance(v, str):
@@ -34,15 +48,17 @@ def tostr(v):
 
 def run_training(test_num, train_args):
 
-    now = strftime("%Y%m%d-%H%M%S", gmtime())
-    if args.name == 'experiment_name':
-        name = "model_%s_%s" % (str(now), str(test_num))
-        train_args.update({"name": name})
+    args_str = ' '.join(unk)
+    if args.name is None:
+        now = strftime("%Y%m%d-%H%M%S", gmtime())
+        name = 'model_%s_%s' % (str(now), str(test_num))
     else:
-        train_args.update({"name": args.name})
+        name = args.name
 
-    log_dir = os.path.join(args.project_dir, args.checkpoints_dir,
-                           train_args['name'])
+    args_str += ' --name %s' % name
+    args_str += ' ' + ' '.join(unk)
+
+    log_dir = os.path.join(args.checkpoints_dir, name)
     print("Log_dir: " + log_dir)
     p_total = ''
     for pi in os.path.split(log_dir):
@@ -50,13 +66,14 @@ def run_training(test_num, train_args):
         if not os.path.isdir(p_total):
             os.mkdir(p_total)
 
-    with open(os.path.join(log_dir, 'readme.txt'), 'a') as f:
-        f.write('%s\n' % (args.readme))
+    if 'readme' in args_dict:
+        with open(os.path.join(log_dir, 'readme.txt'), 'a') as f:
+            f.write('%s\n' % (args.readme))
 
     ksorted = sorted(list(train_args.keys()))
 
     with open(os.path.join(log_dir, 'submit_args.json'), 'w') as fp:
-        json.dump(args_dict, fp)
+        json.dump(unk, fp)
 
     uid = subprocess.check_output(['id', '-u']).decode('utf-8').strip('\n')
     docker_command = (
@@ -70,10 +87,11 @@ def run_training(test_num, train_args):
         '--user %s:%s ' % (uid, '999') +
         'vj/pytorch:gan python ' + os.path.join(
             args.project_dir, 'train.py') + ' ')
-    docker_command += ' '.join('--%s %s' % (k.replace('_', '-'),
-                                            tostr(train_args[k]))
-                               for k in ksorted if train_args[k] is not None) + '\n'
+    # docker_command += ' '.join('--%s %s' % (k.replace('_', '-'),
+    #                                         tostr(train_args[k]))
+    #                            for k in ksorted if train_args[k] is not None) + '\n'
     # docker_command = '/bin/bash -c env'
+    docker_command += args_str
 
     condor_submit_file = os.path.join(log_dir, 'condor_submit_desc')
     docker_run_file = os.path.join(log_dir, 'docker_run')
@@ -125,9 +143,12 @@ def run_training(test_num, train_args):
 
     subprocess.check_call(['condor_submit', condor_submit_file])
 
+    # with open('./run.log', 'a') as f:
+    #     f.write('%s %s\n' % (now, ' '.join(
+    #         ('--{} {}'.format(k, v) for k, v in args._get_kwargs()))))
     with open('./run.log', 'a') as f:
-        f.write('%s %s\n' % (now, ' '.join(
-            ('--{} {}'.format(k, v) for k, v in args._get_kwargs()))))
+        f.write('python ' + args_str)
+
 
 
 def run_cv():
@@ -142,10 +163,15 @@ def run_cv():
 
     train_args = ({
         k.replace('-', '_'): args_dict[k.replace('-', '_')]
-        for k in [key for key in opt.train_args] +
-        [key for key in opt.base_args] + list(sweep_params.keys())
-        if k.replace('-', '_') in args_dict
+        for k in args_dict.keys()
     })
+
+    # train_args = ({
+    #     k.replace('-', '_'): args_dict[k.replace('-', '_')]
+    #     for k in [key for key in opt.train_args] +
+    #     [key for key in opt.base_args] + list(sweep_params.keys())
+    #     if k.replace('-', '_') in args_dict
+    # })
 
     for i in range(args.max_runs):
         if args.rand:
@@ -161,4 +187,5 @@ def run_cv():
 
 
 if __name__ == '__main__':
-    run_cv()
+    # run_cv()
+    run_training(0, args_dict)
