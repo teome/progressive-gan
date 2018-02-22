@@ -182,6 +182,10 @@ class ProgressiveGAN:
         y_real = self.netD(x_real, staget)
         self.pred_real = y_real
         loss_d_real = y_real.mean()
+
+        if not x_real.requires_grad:
+            raise RuntimeError('x_real doesnt require grad')
+
         x_real.requires_grad and loss_d_real.backward(self.mone, retain_graph=True)
 
         # Fake samples

@@ -130,6 +130,9 @@ class Generator(nn.Module):
         staged2 = int(stage // 2)
         staged2p1 = int(stage // 2 + 1)
 
+        if not z.is_cuda:
+            raise RuntimeError('z not cuda')
+        print('z device', z.get_device())
         h = z.view(z.shape[0], self.nz, 1, 1)
         h = F.leaky_relu(feature_vector_normalization(self.c0(h)))
         h = F.leaky_relu(feature_vector_normalization(self.c1(h)))
@@ -239,6 +242,10 @@ class Discriminator(nn.Module):
 
         staged2 = int(stage // 2)
         staged2p1 = int(stage // 2 + 1)
+
+        if not x.is_cuda:
+            raise RuntimeError('z not cuda')
+        print('x device', x.get_device())
 
         if (int(stage) % 2) == 0:
             fromRGB = getattr(self, 'in%d' % (staged2))
