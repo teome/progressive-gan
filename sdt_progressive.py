@@ -15,7 +15,7 @@ from progressive_generator import Generator, Discriminator
 
 try:
     from tensorboardX import SummaryWriter
-    has_tb = True
+    has_tb = False
 except:
     print('Failed to import tensorboardX, no logging possible')
     has_tb = False
@@ -43,7 +43,10 @@ class SDTProgressive:
         self._stage = None
         self._losses = self._empty_losses()
         if has_tb:
-            self._writer = SummaryWriter
+            logdir = os.path.join(opt.outf, opt.name) if opt.name else opt.outf
+            self._writer = SummaryWriter(logdir=logdir)
+        else:
+            self._writer = None
         size = opt.fineSize
         batch_size = opt.batchSize
 
@@ -69,9 +72,9 @@ class SDTProgressive:
         # Wrap in dataparallel after loading; saved models are unwrapped
         # and on the cpu
         gpu_ids = range(self.ngpu) if self.ngpu > 0 else None
-        self.netG = nn.parallel.DataParallel(netG, device_ids=gpu_ids)
+        self.netG = nn.parallel.DataParallel(netG.cuda(), device_ids=gpu_ids)
         if not opt.phase == 'test':
-            self.netD = nn.parallel.DataParallel(netD, device_ids=gpu_ids)
+            self.netD = nn.parallel.DataParallel(netD.cuda(), device_ids=gpu_ids)
 
         # Fixed vector for image generation
         self.input = self.Tensor(batch_size, self.input_nc, size, size)
@@ -141,7 +144,7 @@ class SDTProgressive:
     def update_discriminator(self, x_real_cpu):
         stage = self.stage
         # Data parallel requires tensors for all args
-        staget = Variable(self.Tensor([stage]))
+        staget = Variable(self.Tensor([stage] * min(1, self.ngpu)))
         max_resol = self.max_resolution
 
         if self.ngpu > 0:
@@ -175,7 +178,8 @@ class SDTProgressive:
 
         self.optimizer_D.zero_grad()
 
-        y_real = self.netD.forward(x_real, stage=staget)
+        # y_real = self.netD.forward(x_real, stage=staget)
+        y_real = self.netD(x_real, staget)
         self.pred_real = y_real
         loss_d_real = y_real.mean()
         x_real.requires_grad and loss_d_real.backward(self.mone, retain_graph=True)
@@ -183,9 +187,9 @@ class SDTProgressive:
         # Fake samples
         z = self.netG.module.sample_latent(x_real.shape[0])
         z = Variable(z)
-        x_fake = self.netG(z, stage=staget)
+        x_fake = self.netG(z, staget)
         self.x_fake = x_fake
-        y_fake = self.netD(x_fake.detach(), stage=staget)
+        y_fake = self.netD(x_fake.detach(), staget)
         self.pred_fake = y_fake
         loss_d_fake = y_fake.mean()
         x_real.requires_grad and loss_d_fake.backward(self.one)
@@ -197,7 +201,7 @@ class SDTProgressive:
 
             x_interp = eps * x_real.data + onemineps * x_fake.data
             x_interp = Variable(x_interp, requires_grad=True)
-            y_interp = self.netD(x_interp, stage=staget)
+            y_interp = self.netD(x_interp, staget)
 
             dy_interp = grad(
                     outputs=y_interp,
@@ -238,14 +242,14 @@ class SDTProgressive:
 
     def update_generator(self):
         # Data parallel requires tensors for all args
-        staget = Variable(self.Tensor([self.stage]))
+        staget = Variable(self.Tensor([self.stage] * min(1, self.ngpu)))
         self.optimizer_G.zero_grad()
         # Fake samples
         z = self.netG.module.sample_latent(self.batch_size)
         z = Variable(z.type(self.Tensor))
-        x_fake = self.netG(z, stage=staget)
+        x_fake = self.netG(z, staget)
         self.x_fake = x_fake
-        y_fake = self.netD(x_fake, stage=staget)
+        y_fake = self.netD(x_fake, staget)
         loss_g = -y_fake.mean()
         loss_g.backward()
 
@@ -257,7 +261,7 @@ class SDTProgressive:
     def update(self, x_real_cpu):
         stage = self.stage
         # Data parallel requires tensors for all args
-        staget = Variable(self.Tensor([stage]))
+        staget = Variable(self.Tensor([stage] * min(1, self.ngpu)))
         max_resol = self.max_resolution
 
         if self.ngpu > 0:
@@ -293,7 +297,7 @@ class SDTProgressive:
         if train_flags['D'] and self.phase != 'test':
             self.optimizer_D.zero_grad()
 
-            y_real = self.netD.forward(x_real, stage=staget)
+            y_real = self.netD(x_real, staget)
             self.pred_real = y_real
             loss_d_real = y_real.mean()
             loss_d_real.backward(self.mone)
@@ -301,9 +305,9 @@ class SDTProgressive:
             # Fake samples
             z = self.netG.module.sample_latent(x_real.shape[0])
             z = Variable(z)
-            x_fake = self.netG(z, stage=staget)
+            x_fake = self.netG(z, staget)
             self.x_fake = x_fake
-            y_fake = self.netD(x_fake.detach(), stage=staget)
+            y_fake = self.netD(x_fake.detach(), staget)
             self.pred_fake = y_fake
             loss_d_fake = y_fake.mean()
             loss_d_fake.backward(self.one)
@@ -315,7 +319,7 @@ class SDTProgressive:
 
                 x_interp = eps * x_real.data + onemineps * x_fake.data
                 x_interp = Variable(x_interp, requires_grad=True)
-                y_interp = self.netD(x_interp, stage=staget)
+                y_interp = self.netD(x_interp, staget)
 
                 dy_interp = grad(
                         outputs=y_interp,
@@ -367,9 +371,9 @@ class SDTProgressive:
             # Fake samples
             z = self.netG.module.sample_latent(x_real.shape[0])
             z = Variable(z)
-            x_fake = self.netG(z, stage=staget)
+            x_fake = self.netG(z, staget)
             self.x_fake = x_fake
-            y_fake = self.netD(x_fake, stage=staget)
+            y_fake = self.netD(x_fake, staget)
             loss_g = -y_fake.mean()
             loss_g.backward()
 
@@ -515,7 +519,8 @@ class SDTProgressive:
     def write_summaries(self):
         if not has_tb:
             return
-        self.netD
+        raise NotImplementedError
+
     def generate_images(self, n=None):
         n = n or self.latent_fixed.shape[0]
         vutils.save_image(
@@ -523,9 +528,9 @@ class SDTProgressive:
             '%s/real_samples.png' % self.opt.outf,
             normalize=True)
 
-        fake = self.netG.forward(
+        fake = self.netG(
             Variable(self.latent_fixed[:n], requires_grad=False),
-            stage=Variable(self.Tensor([self.stage]), requires_grad=False))
+            Variable(self.Tensor([self.stage] * min(1, self.ngpu)), requires_grad=False))
         vutils.save_image(
             fake.data,
             '%s/fake_samples_iter_%06d.png' % (self.outf, self.iter_count),
@@ -533,13 +538,13 @@ class SDTProgressive:
 
     def generate_saliency(self, n=None):
         n = n or self.latent_fixed.shape[0]
-        staget = Variable(self.Tensor([self.stage]), requires_grad=False)
-        fake = self.netG.forward(
+        staget = Variable(self.Tensor([self.stage] * min(1, self.ngpu)), requires_grad=False)
+        fake = self.netG(
             Variable(self.latent_fixed[:n], requires_grad=False),
-            stage=staget)
+            staget)
         fake = Variable(fake.data, requires_grad=True)
-        loss = self.netD.forward(fake, stage=staget)
-        loss.mean().backward()
+        loss = self.netD(fake, staget)
+        loss.mean().backward(self.Tensor([-1]))
         salience = fake.grad.data
         vutils.save_image(
             salience,
