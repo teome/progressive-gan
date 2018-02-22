@@ -21,12 +21,12 @@ except:
     has_tb = False
 
 
-class SDTProgressive:
+class ProgressiveGAN:
     def name(self):
-        return 'SDTProgressive'
+        return 'ProgressiveGAN'
 
     def __init__(self, opt):
-        # super(SDTProgressive, self).__init__(opt)
+        # super(ProgressiveGAN, self).__init__(opt)
 
         self.opt = opt
         self.phase = opt.phase
@@ -535,6 +535,11 @@ class SDTProgressive:
             fake.data,
             '%s/fake_samples_iter_%06d.png' % (self.outf, self.iter_count),
             normalize=True)
+        vutils.save_image(
+            fake.data,
+            '%s/fake_samples_unnorm_iter_%06d.png' % (self.outf, self.iter_count),
+            normalize=False)
+
 
     def generate_saliency(self, n=None):
         n = n or self.latent_fixed.shape[0]

@@ -15,7 +15,7 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 from torch.autograd import Variable
 
-from sdt_progressive import SDTProgressive
+from progressive_gan import ProgressiveGAN
 
 
 def main(opt):
@@ -73,7 +73,7 @@ def main(opt):
 
     opt.checkpoint_dir = opt.outf
 
-    model = SDTProgressive(opt)
+    model = ProgressiveGAN(opt)
     model.phase = 'train'
 
     # for epoch in range(opt.niter):
@@ -156,7 +156,7 @@ def parse_args(default=False):
     parser.add_argument('--phase', type=str, default='train', help='phase of operation')
     parser.add_argument('--dataset', type=str, default='folder', help='cifar10 | lsun | imagenet | folder | lfw | fake')
     parser.add_argument('--dataroot', type=str, default='dataroot', help='path to dataset')
-    parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
+    parser.add_argument('--workers', type=int, help='number of data loading workers', default=10)
     parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
     parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
     parser.add_argument('--fineSize', type=int, default=None, help='the height / width of the input image to network')
