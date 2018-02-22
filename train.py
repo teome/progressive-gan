@@ -47,7 +47,7 @@ def main(opt):
                                     transforms.Resize(opt.loadSize),
                                     transforms.CenterCrop(opt.fineSize),
                                     transforms.ToTensor(),
-                                    # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                 ]))
     elif opt.dataset == 'lsun':
         dataset = dset.LSUN(db_path=opt.dataroot, classes=['bedroom_train'],

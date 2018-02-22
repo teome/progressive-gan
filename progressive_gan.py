@@ -15,7 +15,7 @@ from progressive_generator import Generator, Discriminator
 
 try:
     from tensorboardX import SummaryWriter
-    has_tb = False
+    has_tb = True
 except:
     print('Failed to import tensorboardX, no logging possible')
     has_tb = False
@@ -526,10 +526,16 @@ class ProgressiveGAN:
     def get_current_errors(self):
         return self._losses if self._losses else self._empty_losses()
 
+    @property
+    def losses(self):
+        return self._losses if self._losses else self._empty_losses()
+
     def write_summaries(self):
         if not has_tb:
             return
-        raise NotImplementedError
+        losses = self.losses
+        for k, v in losses.items():
+            self._writer.add_scalar(k, v, self.iter_count)
 
     def generate_images(self, n=None):
         n = n or self.latent_fixed.shape[0]
@@ -550,6 +556,10 @@ class ProgressiveGAN:
             fake.data,
             '%s/fake_samples_unnorm_iter_%06d.png' % (self.outf, self.iter_count),
             normalize=False)
+        if not has_tb:
+            return
+        grid = vutils.make_grid(fake.data, normalize=True, scale_each=True)
+        self._writer.add_image('Fake', grid, self.iter_count)
 
 
     def generate_saliency(self, n=None):
