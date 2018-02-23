@@ -475,7 +475,7 @@ class ProgressiveGAN:
             devs = network.device_ids
             net_module = network.module
             torch.save(net_module.cpu().state_dict(), save_path)
-            if len(devs) == 1:
+            if len(devs) > 0:
                 net_module.cuda(devs[0])
         else:
             torch.save(network.cpu().state_dict(), save_path)
