@@ -118,8 +118,8 @@ def main(opt):
         if iterp1 % opt.model_save_freq == 0:
             model.save('%06d' % iteration)
         if iterp1 % opt.image_save_freq == 0:
-            model.generate_images()
-            model.generate_saliency()
+            model.generate_images(scale=True)
+            model.generate_saliency(scale=True)
         if iterp1 % opt.print_iter_freq == 0:
             print('End of iteration %d / %d \t %.3f sec/iter' %
                 (iteration, opt.niter + opt.niter_decay,

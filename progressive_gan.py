@@ -144,7 +144,6 @@ class ProgressiveGAN:
     def update_discriminator(self, x_real_cpu):
         stage = self.stage
         # Data parallel requires tensors for all args
-        staget = Variable(self.Tensor([stage] * min(1, self.ngpu)))
         max_resol = self.max_resolution
 
         if self.ngpu > 0:
@@ -178,8 +177,8 @@ class ProgressiveGAN:
 
         self.optimizer_D.zero_grad()
 
-        # y_real = self.netD.forward(x_real, stage=staget)
-        y_real = self.netD(x_real, staget)
+        # y_real = self.netD.forward(x_real, stage=self.stage)
+        y_real = self.netD(x_real, self.stage)
         self.pred_real = y_real
         loss_d_real = y_real.mean()
 
@@ -192,9 +191,9 @@ class ProgressiveGAN:
         # Fake samples
         z = self.netG.module.sample_latent(x_real.shape[0])
         z = Variable(z, requires_grad=True)
-        x_fake = self.netG(z, staget)
+        x_fake = self.netG(z, self.stage)
         self.x_fake = x_fake
-        y_fake = self.netD(x_fake.detach(), staget)
+        y_fake = self.netD(x_fake.detach(), self.stage)
         self.pred_fake = y_fake
         loss_d_fake = y_fake.mean()
         if x_real.requires_grad:
@@ -207,7 +206,7 @@ class ProgressiveGAN:
 
             x_interp = eps * x_real.data + onemineps * x_fake.data
             x_interp = Variable(x_interp, requires_grad=True)
-            y_interp = self.netD(x_interp, staget)
+            y_interp = self.netD(x_interp, self.stage)
 
             dy_interp = grad(
                     outputs=y_interp,
@@ -250,15 +249,13 @@ class ProgressiveGAN:
         self._losses.update(log_losses)
 
     def update_generator(self):
-        # Data parallel requires tensors for all args
-        staget = Variable(self.Tensor([self.stage] * min(1, self.ngpu)))
         self.optimizer_G.zero_grad()
         # Fake samples
         z = self.netG.module.sample_latent(self.batch_size)
         z = Variable(z.type(self.Tensor), requires_grad=True)
-        x_fake = self.netG(z, staget)
+        x_fake = self.netG(z, self.stage)
         self.x_fake = x_fake
-        y_fake = self.netD(x_fake, staget)
+        y_fake = self.netD(x_fake, self.stage)
         loss_g = y_fake.mean()
         if self.phase == 'train' or self.phase == 'eval':
             loss_g.backward(self.mone)
@@ -271,7 +268,6 @@ class ProgressiveGAN:
     def update(self, x_real_cpu):
         stage = self.stage
         # Data parallel requires tensors for all args
-        staget = Variable(self.Tensor([stage] * min(1, self.ngpu)))
         max_resol = self.max_resolution
 
         if self.ngpu > 0:
@@ -307,7 +303,7 @@ class ProgressiveGAN:
         if train_flags['D'] and self.phase != 'test':
             self.optimizer_D.zero_grad()
 
-            y_real = self.netD(x_real, staget)
+            y_real = self.netD(x_real, self.stage)
             self.pred_real = y_real
             loss_d_real = y_real.mean()
             loss_d_real.backward(self.mone)
@@ -315,9 +311,9 @@ class ProgressiveGAN:
             # Fake samples
             z = self.netG.module.sample_latent(x_real.shape[0])
             z = Variable(z)
-            x_fake = self.netG(z, staget)
+            x_fake = self.netG(z, self.stage)
             self.x_fake = x_fake
-            y_fake = self.netD(x_fake.detach(), staget)
+            y_fake = self.netD(x_fake.detach(), self.stage)
             self.pred_fake = y_fake
             loss_d_fake = y_fake.mean()
             loss_d_fake.backward(self.one)
@@ -329,7 +325,7 @@ class ProgressiveGAN:
 
                 x_interp = eps * x_real.data + onemineps * x_fake.data
                 x_interp = Variable(x_interp, requires_grad=True)
-                y_interp = self.netD(x_interp, staget)
+                y_interp = self.netD(x_interp, self.stage)
 
                 dy_interp = grad(
                         outputs=y_interp,
@@ -381,9 +377,9 @@ class ProgressiveGAN:
             # Fake samples
             z = self.netG.module.sample_latent(x_real.shape[0])
             z = Variable(z)
-            x_fake = self.netG(z, staget)
+            x_fake = self.netG(z, self.stage)
             self.x_fake = x_fake
-            y_fake = self.netD(x_fake, staget)
+            y_fake = self.netD(x_fake, self.stage)
             loss_g = -y_fake.mean()
             loss_g.backward()
 
@@ -537,24 +533,46 @@ class ProgressiveGAN:
         for k, v in losses.items():
             self._writer.add_scalar(k, v, self.iter_count)
 
-    def generate_images(self, n=None):
+    def _upsample_images(self, images):
+        """Returns upscaled images
+
+        Expects Variable
+        """
+        max_resol = self.max_resolution
+        resol = images.shape[-1]
+        scale_factor = max(1, max_resol // resol)
+        if scale_factor > 1:
+            return F.upsample(images,
+                              scale_factor=scale_factor,
+                              mode='bilinear')
+        return images
+
+    def generate_images(self, n=None, scale=False):
         n = n or self.latent_fixed.shape[0]
+        real = self.input
+        with torch.no_grad():
+            fake = self.netG(Variable(self.latent_fixed[:n]), self.stage)
+
+        if scale:
+            with torch.no_grad():
+                real = self._upsample_images(real)
+                fake = self._upsample_images(fake)
+
+        save_path = os.path.join(self.outf, 'images')
+        os.makedirs(save_path, exist_ok=True)
+
         vutils.save_image(
             self.input[:n],
             '%s/real_samples.png' % self.opt.outf,
             normalize=True)
 
-        with torch.no_grad():
-            fake = self.netG(
-                Variable(self.latent_fixed[:n]),
-                Variable(self.Tensor([self.stage] * min(1, self.ngpu))))
         vutils.save_image(
             fake.data,
-            '%s/fake_samples_iter_%06d.png' % (self.outf, self.iter_count),
+            '%s/fake_samples_iter_%06d.png' % (save_path, self.iter_count),
             normalize=True)
         vutils.save_image(
             fake.data,
-            '%s/fake_samples_unnorm_iter_%06d.png' % (self.outf, self.iter_count),
+            '%s/fake_samples_unnorm_iter_%06d.png' % (save_path, self.iter_count),
             normalize=False)
         if not has_tb:
             return
@@ -562,20 +580,32 @@ class ProgressiveGAN:
         self._writer.add_image('Fake', grid, self.iter_count)
 
 
-    def generate_saliency(self, n=None):
+    def generate_saliency(self, n=None, scale=False):
+        save_path = os.path.join(self.outf, 'salience_images')
+        os.makedirs(save_path, exist_ok=True)
+
         n = n or self.latent_fixed.shape[0]
-        staget = Variable(self.Tensor([self.stage] * min(1, self.ngpu)))
         fake = self.netG(
             Variable(self.latent_fixed[:n]),
-            staget)
+            self.stage)
         fake = Variable(fake.data, requires_grad=True)
-        loss = self.netD(fake, staget)
+        loss = self.netD(fake, self.stage)
         loss.mean().backward(self.Tensor([-1]))
-        salience = fake.grad.data
+        salience = fake.grad
+
+        if scale:
+            with torch.no_grad():
+                salience = self._upsample_images(salience).data
         vutils.save_image(
             salience,
-            '%s/salience_samples_iter_%06d.png' % (self.outf, self.iter_count),
+            '%s/salience_samples_iter_%06d.png' % (save_path, self.iter_count),
             normalize=True)
+        # Save max across colour channels
+        vutils.save_image(
+            salience.max(dim=1, keepdim=True)[0].repeat(1, fake.shape[1], 1, 1),
+            '%s/salience_max_samples_iter_%06d.png' % (save_path, self.iter_count),
+            normalize=True)
+
 
     def save(self, label):
         self.save_network(self.netG, 'G', label)
