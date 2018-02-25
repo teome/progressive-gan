@@ -44,7 +44,7 @@ class ProgressiveGAN:
         self._stage = None
         self._losses = self._empty_losses()
         if has_tb:
-            logdir = os.path.join(opt.outf, opt.name) if opt.name else opt.outf
+            logdir = os.path.join(opt.outf, 'tb')
             self._writer = SummaryWriter(log_dir=logdir)
         else:
             self._writer = None
@@ -656,10 +656,7 @@ def get_scheduler(optimizer, opt, iter_count=1):
 
 def get_latest_checkpoints(opt):
     chkp_suffix = '_net_D.pth'
-    if opt.name is not None:
-        chkp_pattern = os.path.join(opt.outf, opt.name, '*%s' % chkp_suffix)
-    else:
-        chkp_pattern = os.path.join(opt.outf, '*%s' % chkp_suffix)
+    chkp_pattern = os.path.join(opt.outf, '*%s' % chkp_suffix)
     list_of_files = glob.glob(chkp_pattern)
 
     if len(list_of_files) == 0:
