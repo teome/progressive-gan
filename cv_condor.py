@@ -47,13 +47,13 @@ def tostr(v):
 
 def run_training(test_num, train_args):
 
-    args_str = ' '.join(unk)
     if args.name is None:
         now = strftime("%Y%m%d-%H%M%S", gmtime())
         name = 'model_%s_%s' % (str(now), str(test_num))
     else:
         name = args.name
 
+    args_str = ''
     args_str += ' --name %s' % name
 
     log_dir = os.path.join(args.checkpoints_dir, name)
