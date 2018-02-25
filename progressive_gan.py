@@ -35,6 +35,7 @@ class ProgressiveGAN:
         self.outf = opt.outf
         self.name = opt.name
         self.batch_size = opt.batchSize
+        self.latent_fixed_batch_size = opt.latent_fixed_bs or self.batch_size
         self.input_nc = 3
         self.nz = opt.nz
         self.max_resolution = opt.fineSize
@@ -79,8 +80,8 @@ class ProgressiveGAN:
         # Fixed vector for image generation
         self.input = self.Tensor(batch_size, self.input_nc, size, size)
         self.latent = self.Tensor(batch_size, self.nz, 1, 1)
-        latent_fixed = self.netG.module.sample_latent(self.batch_size)
-        self.latent_fixed = self.Tensor(batch_size, self.nz, 1, 1)
+        latent_fixed = self.netG.module.sample_latent(self.latent_fixed_batch_size)
+        self.latent_fixed = self.Tensor(self.latent_fixed_batch_size, self.nz, 1, 1)
         self.latent_fixed.copy_(latent_fixed if self.ngpu < 1 else
                                 latent_fixed.cuda())
         self.one = self.Tensor([1])

@@ -158,6 +158,7 @@ def parse_args(default=False):
     parser.add_argument('--dataroot', type=str, default='dataroot', help='path to dataset')
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=10)
     parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
+    parser.add_argument('--latent-fixed-bs', type=int, default=None, help='batch size for fixed latent vector used to generate images during training (default None means use batchSize)')
     parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
     parser.add_argument('--fineSize', type=int, default=None, help='the height / width of the input image to network')
     parser.add_argument('--loadSize', type=int, default=None, help='the load height / width of the input image')

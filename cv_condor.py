@@ -55,9 +55,11 @@ def run_training(test_num, train_args):
         name = args.name
 
     args_str += ' --name %s' % name
-    args_str += ' ' + ' '.join(unk)
 
     log_dir = os.path.join(args.checkpoints_dir, name)
+    args_str += ' --outf %s' % log_dir
+    args_str += ' ' + ' '.join(unk)
+
     print("Log_dir: " + log_dir)
     p_total = ''
     for pi in os.path.split(log_dir):
