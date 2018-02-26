@@ -50,7 +50,7 @@ def main(opt):
                                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                 ]))
     elif opt.dataset == 'lsun':
-        dataset = dset.LSUN(db_path=opt.dataroot, classes=['bedroom_train'],
+        dataset = dset.LSUN(db_path=opt.dataroot, classes=['tower_train'],
                             transform=transforms.Compose([
                                 transforms.Resize(opt.loadSize),
                                 transforms.CenterCrop(opt.fineSize),

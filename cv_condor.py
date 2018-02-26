@@ -80,13 +80,15 @@ def run_training(test_num, train_args):
     docker_command = (
         'export NV_GPU=$CUDA_VISIBLE_DEVICES\n' +
         'cat /etc/hostname\n' +
+        # 'conda install lmdb python-lmdb\n' + 
         'exec /usr/bin/nvidia-docker run --rm --ipc=host --sig-proxy=true ' +
         '--volume %s:%s ' % (args.project_dir, args.project_dir) +
         '--volume %s:%s ' % ('/home/mval', '/home/mval') +
         '--volume %s:%s ' % ('/scratch', '/scratch') +
         '--workdir %s ' % (args.project_dir) +
         '--user %s:%s ' % (uid, '999') +
-        'vj/pytorch:gan python ' + os.path.join(
+        # 'vj/pytorch:gan python ' + os.path.join(
+        'docker-registry.mval/dak2/pytorch-tb:d2f71c-9.0-7 python ' + os.path.join(
             args.project_dir, 'train.py') + ' ')
     # docker_command += ' '.join('--%s %s' % (k.replace('_', '-'),
     #                                         tostr(train_args[k]))

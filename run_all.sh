@@ -1,15 +1,15 @@
 # ds_root='/home/mval/datasets/cyclegan_celeb/origs/street_grey_3/'
 dt_dir='/scratch/progressive_0'
-ds_root=$dt_dir'/data'
+ds_root=$dt_dir'/lsun'
 chkp_dir='/home/mval/data/progressive_1/logs_2/'
 proj_dir=$dt_dir'/code'
-machine='any'
+machine='mval4.mval'
 max_stage=8
-stage_interval=601600
-stage_iters=$(($stage_interval/64))
+stage_interval=800000
+stage_iters=$(($stage_interval/16))
 iters=$((${stage_iters}*14))
-model_save_freq=$((${stage_iters}/8)) # 1175
-image_save_freq=$(($stage_iters/50))
+model_save_freq=$((${stage_iters}/20)) # 1175
+image_save_freq=$(($stage_iters/100))
 print_iter_freq=$(($stage_iters/200))
 train_log_freq=$print_iter_freq
 
@@ -21,11 +21,16 @@ train_log_freq=$print_iter_freq
 # sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 64 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataroot $ds_root --lr 0.0004 --beta1 0.5 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq
 # sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 64 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataroot $ds_root --lr 0.00004 --beta1 0.5 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq
 
-sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 64 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataroot $ds_root --lr 0.0002 --beta1 0.5 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10
-sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 64 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataroot $ds_root --lr 0.00002 --beta1 0.5 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 
-sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 64 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataroot $ds_root --lr 0.0004 --beta1 0.5 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 
-sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 64 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataroot $ds_root --lr 0.00004 --beta1 0.5 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 
+# 20180226
+# sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 64 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataroot $ds_root --lr 0.0002 --beta1 0.5 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10
+# sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 64 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataroot $ds_root --lr 0.00002 --beta1 0.5 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 
+# sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 64 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataroot $ds_root --lr 0.0004 --beta1 0.5 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 
+# sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 64 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataroot $ds_root --lr 0.00004 --beta1 0.5 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 
 
+sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 16 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataset lsun --dataroot $ds_root --lr 0.001 --beta1 0.0 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 1
+sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 16 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataset lsun --dataroot $ds_root --lr 0.0001 --beta1 0.0 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 1
+sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 16 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataset lsun --dataroot $ds_root --lr 0.005 --beta1 0.0 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 1
+# sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 4 --killer --niter $iters --batchSize 16 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataset lsun --dataroot $ds_root --lr 0.0005 --beta1 0.0 --ngpu 4 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 1
 
 
 

@@ -64,6 +64,8 @@ class ProgressiveGAN:
 
         netG = Generator(self.nz, opt.ngf, max_stage=self.max_stage)
         self.netG = netG
+        with torch.no_grad():
+            self.netG_avg = Generator(self.nz, opt.ngf, max_stage=self.max_stage)
         self.netD = None
         if not opt.phase == 'test':
             netD = Discriminator(opt.ndf, max_stage=self.max_stage)
@@ -265,6 +267,10 @@ class ProgressiveGAN:
             self.optimizer_G.step()
 
         self._losses.update({'loss_g':loss_g.data[0]})
+
+        if self.phase == 'train':
+            for pavg, p in zip(self.netG_avg.parameters(), self.netG.parameters()):
+                pavg.data.mul_(0.999).add_(0.001, p.data.clone().cpu())
 
     def update(self, x_real_cpu):
         stage = self.stage
@@ -542,7 +548,7 @@ class ProgressiveGAN:
         max_resol = self.max_resolution
         resol = images.shape[-1]
         scale_factor = max(1, max_resol // resol)
-        if scale_factor > 1:
+        if scale_factor > 1.0:
             return F.upsample(images,
                               scale_factor=scale_factor,
                               mode='bilinear')
@@ -553,11 +559,19 @@ class ProgressiveGAN:
         real = self.input
         with torch.no_grad():
             fake = self.netG(Variable(self.latent_fixed[:n]), self.stage)
+            if self.ngpu > 0:
+                fake_avg = nn.parallel.data_parallel(
+                    self.netG_avg.cuda(),
+                    (Variable(self.latent_fixed[:n]), self.stage), device_ids=range(self.ngpu))
+                self.netG_avg.cpu()
+            else:
+                fake_avg = self.netG_avg(self.latent_fixed[:n], self.stage)
 
         if scale:
             with torch.no_grad():
                 real = self._upsample_images(real)
                 fake = self._upsample_images(fake)
+                fake_avg = self._upsample_images(fake_avg)
 
         save_path = os.path.join(self.outf, 'images')
         os.makedirs(save_path, exist_ok=True)
@@ -571,13 +585,17 @@ class ProgressiveGAN:
             fake.data,
             '%s/fake_samples_iter_%06d.png' % (save_path, self.iter_count),
             normalize=True)
+        # vutils.save_image(
+        #     fake.data,
+        #     '%s/fake_samples_unnorm_iter_%06d.png' % (save_path, self.iter_count),
+        #     normalize=False)
         vutils.save_image(
-            fake.data,
-            '%s/fake_samples_unnorm_iter_%06d.png' % (save_path, self.iter_count),
-            normalize=False)
+            fake_avg.data,
+            '%s/fake_samples_avg_iter_%06d.png' % (save_path, self.iter_count),
+            normalize=True)
         if not has_tb:
             return
-        grid = vutils.make_grid(fake.data, normalize=True, scale_each=True)
+        grid = vutils.make_grid(fake_avg.data, normalize=True, scale_each=True)
         self._writer.add_image('Fake', grid, self.iter_count)
 
 
