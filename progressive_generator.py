@@ -14,17 +14,61 @@ def feature_vector_normalization(x, eps=1e-8):
     return alpha * x
 
 
+# class EqualizedConv2d(nn.Module):
+#     def __init__(self, in_ch, out_ch, ksize, stride, pad):
+#         super(EqualizedConv2d, self).__init__()
+#         # w = chainer.initializers.Normal(1.0) # equalized learning rate
+#         self.inv_c = torch.FloatTensor([np.sqrt(2.0/(in_ch*ksize**2))])
+#         self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad)
+
+#         init.normal(self.c.weight.data, 0.0, 1.0)
+
+#     def forward(self, x):
+#         return self.c(Variable(self.inv_c.type_as(x.data)) * x)
+
+# class EqualizedConv2d(nn.Module):
+#     def __init__(self, in_ch, out_ch, ksize, stride, pad):
+#         super(EqualizedConv2d, self).__init__()
+#         # w = chainer.initializers.Normal(1.0) # equalized learning rate
+#         self.inv_c = torch.FloatTensor([np.sqrt(2.0/(in_ch*ksize**2))])
+#         self.c = weight_norm(nn.Conv2d(in_ch, out_ch, ksize, stride, pad))
+
+#         init.normal(self.c.weight.data, 0.0, 1.0)
+
+#     def forward(self, x):
+#         # return self.c(Variable(self.inv_c.type_as(x.data)) * x)
+#         print('before', self.c.weight.data.norm())
+#         r = self.c(Variable(self.inv_c.type_as(x.data)) * x)
+#         print('after', self.c.weight.data.norm())
+#         return r
+
+
 class EqualizedConv2d(nn.Module):
     def __init__(self, in_ch, out_ch, ksize, stride, pad):
         super(EqualizedConv2d, self).__init__()
-        # w = chainer.initializers.Normal(1.0) # equalized learning rate
-        self.inv_c = torch.FloatTensor([np.sqrt(2.0/(in_ch*ksize**2))])
+        self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad)
+
+        init.kaiming_normal(self.c.weight.data, mode='fan_in')
+        self.scale = torch.FloatTensor([self.c.weight.data.norm(2)])
+        self.c.weight.data.div_(self.scale)
+
+    def forward(self, x):
+        return self.c(Variable(self.scale.type_as(x.data)) * x)
+
+
+class EqualizedNormalConv2d(nn.Module):
+    def __init__(self, in_ch, out_ch, ksize, stride, pad):
+        super(EqualizedConv2d, self).__init__()
         self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad)
 
         init.normal(self.c.weight.data, 0.0, 1.0)
+        self.scale = torch.FloatTensor([np.sqrt(2.0/(in_ch*ksize**2))])
 
     def forward(self, x):
-        return self.c(Variable(self.inv_c.type_as(x.data)) * x)
+        return self.c(Variable(self.scale.type_as(x.data)) * x)
+
+
+
 
 class EqualizedLinear(nn.Module):
     def __init__(self, in_ch, out_ch):
@@ -32,7 +76,7 @@ class EqualizedLinear(nn.Module):
         self.inv_c = torch.FloatTensor([np.sqrt(2.0 / in_ch)])
         self.c = nn.Linear(in_ch, out_ch)
 
-        init.normal(self.c.weight.data, 0.0, 1.0)
+
         init.constant(self.c.bias.data, 0.0)
         # !!! TODO Init bias?
 
