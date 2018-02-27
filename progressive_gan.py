@@ -244,10 +244,10 @@ class ProgressiveGAN:
             self.optimizer_D.step()
 
         log_losses = dict(
-            loss_d=loss_d.data[0],
-            loss_d_real=loss_d_real.data[0],
-            loss_d_fake=loss_d_fake.data[0],
-            loss_d_gp=loss_d_gp.data[0]
+            loss_d=loss_d.data.item(),
+            loss_d_real=loss_d_real.item(),
+            loss_d_fake=loss_d_fake.item(),
+            loss_d_gp=loss_d_gp.item(),
         )
         self._losses.update(log_losses)
 
@@ -266,7 +266,7 @@ class ProgressiveGAN:
         if self.phase == 'train':
             self.optimizer_G.step()
 
-        self._losses.update({'loss_g':loss_g.data[0]})
+        self._losses.update({'loss_g':loss_g.data.item()})
 
         if self.phase == 'train':
             for pavg, p in zip(self.netG_avg.parameters(), self.netG.parameters()):
@@ -366,10 +366,10 @@ class ProgressiveGAN:
                 self.optimizer_D.step()
 
             log_losses = dict(
-                loss_d=loss_d.data[0],
-                loss_d_real=loss_d_real.data[0],
-                loss_d_fake=loss_d_fake.data[0],
-                loss_d_gp=loss_d_gp.data[0]
+                loss_d=loss_d.data.item(),
+                loss_d_real=loss_d_real.item(),
+                loss_d_fake=loss_d_fake.data.item(),
+                loss_d_gp=loss_d_gp.data.item()
             )
         else:
             log_losses = dict(
@@ -395,7 +395,7 @@ class ProgressiveGAN:
                 # loss_g.backward()
                 self.optimizer_G.step()
 
-            log_losses.update({'loss_g':loss_g.data[0]})
+            log_losses.update({'loss_g':loss_g.data.item()})
         else:
             log_losses.update({'loss_g':0.0})
         self.log_losses = log_losses
