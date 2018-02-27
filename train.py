@@ -99,6 +99,9 @@ def main(opt):
             raise RuntimeError('failed to load data from dataloader')
     get_batch = DataIterator(dataloader)
 
+    if opt.start_stage:
+        model.iter_count = opt.start_stage * opt.stage_interval / opt.batchSize
+
     training_start_time = time.time()
 
     while model.iter_count < opt.niter:
@@ -169,8 +172,9 @@ def parse_args(default=False):
     parser.add_argument('--niter-decay', type=int, default=200, help='number of iterations to decay learning rate')
     parser.add_argument('--stage-interval', type=int, default=300000, help='number of examples seen per stage')
     parser.add_argument('--max-stage', type=int, default=6, help='max stage for progressive growth')
-    parser.add_argument('--n_gen', type=int, default=1, help='number of generator updates per discriminator')
-    parser.add_argument('--n_dis', type=int, default=1, help='number of discriminator updates per discriminator')
+    parser.add_argument('--start-stage', type=int, default=None, help='')
+    parser.add_argument('--n-gen', type=int, default=1, help='number of generator updates per discriminator')
+    parser.add_argument('--n-dis', type=int, default=1, help='number of discriminator updates per discriminator')
     parser.add_argument('--optimizer', type=str, default='adam', help='adam | rms')
     parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
     parser.add_argument('--lr-policy', type=str, default='lambda', help='lr scheduler policy')
