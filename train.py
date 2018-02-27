@@ -103,7 +103,7 @@ def main(opt):
         model.iter_count = opt.start_stage * opt.stage_interval / opt.batchSize
 
     training_start_time = time.time()
-
+    timing_iter = 1
     while model.iter_count < opt.niter:
         for iter_dis in range(opt.n_dis):
             real_cpu, _ = get_batch()
@@ -126,10 +126,11 @@ def main(opt):
         if iterp1 % opt.print_iter_freq == 0:
             print('End of iteration %d / %d \t %.3f sec/iter' %
                 (iteration, opt.niter + opt.niter_decay,
-                (time.time() - training_start_time) / (iterp1)))
+                (time.time() - training_start_time) / (timing_iter)))
 
         model.iter_count += 1
         model.update_learning_rate()
+        timing_iter += 1
 
 
 class Logger():

@@ -41,6 +41,7 @@ class ProgressiveGAN:
         self.max_resolution = opt.fineSize
         self.stage_interval = opt.stage_interval
         self.max_stage = opt.max_stage
+        self._stage_iter_mult = float(self.batch_size) / self.stage_interval
         self._stage = None
         self._losses = self._empty_losses()
         if has_tb:
@@ -129,7 +130,7 @@ class ProgressiveGAN:
 
     @property
     def stage(self):
-        s = float(self.iter_count * self.batch_size) / self.stage_interval
+        s = float(self.iter_count) * self._stage_iter_mult
         s_floor = math.floor(s)
         if self._stage is not None:
             if s_floor > self._stage:
@@ -188,8 +189,8 @@ class ProgressiveGAN:
         if not x_real.requires_grad and args.phase == 'train':
             raise RuntimeError('x_real doesnt require grad')
 
-        if x_real.requires_grad:
-            loss_d_real.backward(self.mone, retain_graph=True)
+        # if x_real.requires_grad:
+            # loss_d_real.backward(self.mone, retain_graph=True)
 
         # Fake samples
         z = self.netG.module.sample_latent(x_real.shape[0])
@@ -199,8 +200,8 @@ class ProgressiveGAN:
         y_fake = self.netD(x_fake.detach(), self.stage)
         self.pred_fake = y_fake
         loss_d_fake = y_fake.mean()
-        if x_real.requires_grad:
-            loss_d_fake.backward(self.one)
+        # if x_real.requires_grad:
+            # loss_d_fake.backward(self.one)
         loss_d = loss_d_fake - loss_d_real
 
         if self.phase == 'train' or self.phase == 'eval':
@@ -235,12 +236,13 @@ class ProgressiveGAN:
         # gradient penalty plus loss for parameter drift
         loss_d_penalty = loss_d_gp
         loss_d_drift = 0.001 * (y_real * y_real).mean()
-        if x_real.requires_grad:
-            loss_d_penalty.backward()
-            loss_d_drift.backward()
+        # if x_real.requires_grad:
+            # loss_d_penalty.backward()
+            # loss_d_drift.backward()
         loss_d += loss_d_penalty + loss_d_drift
 
         if self.phase == 'train':
+            loss_d.backward()
             self.optimizer_D.step()
 
         log_losses = dict(
@@ -584,7 +586,8 @@ class ProgressiveGAN:
         vutils.save_image(
             fake.data,
             '%s/fake_samples_iter_%06d.png' % (save_path, self.iter_count),
-            normalize=True)
+            normalize=True,
+            scale_each=True)
         # vutils.save_image(
         #     fake.data,
         #     '%s/fake_samples_unnorm_iter_%06d.png' % (save_path, self.iter_count),
@@ -592,7 +595,8 @@ class ProgressiveGAN:
         vutils.save_image(
             fake_avg.data,
             '%s/fake_samples_avg_iter_%06d.png' % (save_path, self.iter_count),
-            normalize=True)
+            normalize=True,
+            scale_each=True)
         if not has_tb:
             return
         grid = vutils.make_grid(fake_avg.data, normalize=True, scale_each=True)

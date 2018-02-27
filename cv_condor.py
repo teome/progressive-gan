@@ -102,15 +102,15 @@ def run_training(test_num, train_args):
     cond_args = 'Arguments = %s' % (docker_run_file)
     if args.machine == 'mval5.mval':
         num_cpus = 10
-        memory = 40
+        memory = args.memory or 16 * args.num_gpus
         machines_req = "(machine == \"mval5.mval\")"
     elif args.machine == 'any':
-        num_cpus = 8
-        memory = 25
+        num_cpus = args.num_cpus or 8
+        memory = args.memory or 25
         machines_req = "((machine == \"mval1.mval\") || (machine == \"mval20.mval\") || (machine == \"mval3.mval\") || (machine == \"mval4.mval\") || (machine == \"mval5.mval\"))"
     else:
-        num_cpus = 4
-        memory = 20
+        num_cpus = args.num_cpus or 4
+        memory = args.memory or 54. / 4 * args.num_gpus
         machines_req = "(machine == \"%s\")" % args.machine
 
     cond_desc = """\
