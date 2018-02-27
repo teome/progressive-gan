@@ -61,6 +61,18 @@ class EqualizedConv2d(nn.Module):
         return y + self.bias.view(1, self.bias.shape[0], 1, 1)
 
 
+# class EqualizedConv2d(nn.Module):
+#     def __init__(self, in_ch, out_ch, ksize, stride, pad):
+#         super(EqualizedConv2d, self).__init__()
+#         self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad)
+
+#         init.normal(self.c.weight.data, 0.0, 1.0)
+#         self.scale = torch.FloatTensor([np.sqrt(2.0/(in_ch*ksize**2))])
+
+#     def forward(self, x):
+#         return self.c(Variable(self.scale.type_as(x.data)) * x)
+
+
 class EqualizedNormalConv2d(nn.Module):
     def __init__(self, in_ch, out_ch, ksize, stride, pad):
         super(EqualizedConv2d, self).__init__()
