@@ -521,11 +521,11 @@ class ProgressiveGAN:
 
     def _empty_losses(self):
         return OrderedDict([
-            ('G', 0.),
-            ('D_real', 0.),
-            ('D_fake', 0.),
-            ('D_GP', 0.),
-            ('D', 0.),
+            ('loss_g', 0.),
+            ('loss_d', 0.),
+            ('loss_d_real', 0.),
+            ('loss_d_fake', 0.),
+            ('loss_d_gp', 0.),
         ])
 
     def get_current_errors(self):
