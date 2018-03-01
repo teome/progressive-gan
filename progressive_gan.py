@@ -77,6 +77,7 @@ class ProgressiveGAN:
         # and on the cpu
         gpu_ids = range(self.ngpu) if self.ngpu > 0 else None
         self.netG = nn.parallel.DataParallel(netG.cuda(), device_ids=gpu_ids)
+        self.netG_avg = nn.parallel.DataParallel(self.netG_avg.cuda(), device_ids=gpu_ids)
         if not opt.phase == 'test':
             self.netD = nn.parallel.DataParallel(netD.cuda(), device_ids=gpu_ids)
 
@@ -272,7 +273,9 @@ class ProgressiveGAN:
 
         if self.phase == 'train':
             for pavg, p in zip(self.netG_avg.parameters(), self.netG.parameters()):
-                pavg.data.mul_(0.999).add_(0.001, p.data.clone().cpu())
+                # Stay on the GPU not CPU
+                # pavg.data.mul_(0.999).add_(0.001, p.data.clone().cpu())
+                pavg.data.mul_(0.999).add_(0.001, p.data.clone())
 
     def update(self, x_real_cpu):
         stage = self.stage
@@ -439,6 +442,11 @@ class ProgressiveGAN:
     def _load_model(self, epoch):
         epoch_label = "%06d" % (epoch)
         self.load_network(self.netG, 'G', epoch_label)
+        try:
+            self.load_network(self.netG_avg, 'G_avg', epoch_label)
+        except:
+            print('Failed to load G_avg, loading G instead for smooth G')
+            self.load_network(self.netG_avg, 'G', epoch_label)
         if not self.phase == 'test':
             self.load_network(self.netD, 'D', epoch_label)
 
@@ -561,13 +569,7 @@ class ProgressiveGAN:
         real = self.input
         with torch.no_grad():
             fake = self.netG(Variable(self.latent_fixed[:n]), self.stage)
-            if self.ngpu > 0:
-                fake_avg = nn.parallel.data_parallel(
-                    self.netG_avg.cuda(),
-                    (Variable(self.latent_fixed[:n]), self.stage), device_ids=range(self.ngpu))
-                self.netG_avg.cpu()
-            else:
-                fake_avg = self.netG_avg(self.latent_fixed[:n], self.stage)
+            fake_avg = self.netG_avg(self.latent_fixed[:n], self.stage)
 
         if scale:
             with torch.no_grad():
@@ -632,6 +634,7 @@ class ProgressiveGAN:
 
     def save(self, label):
         self.save_network(self.netG, 'G', label)
+        self.save_network(self.netG_avg, 'G_avg', label)
         self.save_network(self.netD, 'D', label)
 
     def should_train(self):
