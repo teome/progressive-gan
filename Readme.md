@@ -61,8 +61,8 @@ sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_d
 8366.0   dak2            2/27 10:14   0+00:52:43 H  0    8.0 bash /home/mval/data/progressive_1/logs_2/model_20180227-101405_0/docker_run
 8371.0   dak2            2/27 11:22   0+10:20:49 H  0    8.0 bash /home/mval/data/progressive_1/logs_2/model_20180227-112233_0/docker_run
 8377.0   dak2            2/27 13:51   0+07:51:42 H  0    8.0 bash /home/mval/data/progressive_1/logs_2/model_20180227-104958_0/docker_run
-8381.0   dak2            2/27 21:46   1+12:06:15 R  0    8.0 bash /home/mval/data/progressive_1/logs_3/model_20180227-214656_0/docker_run Ok
-8384.0   dak2            2/27 21:47   1+12:05:55 R  0    8.0 bash /home/mval/data/progressive_1/logs_3/model_20180227-214702_0/docker_run bad
+8381.0   dak2            2/27 21:46   1+12:06:15 R  0    8.0 bash /home/mval/data/progressive_1/logs_3/model_20180227-214656_0/docker_run o 
+8384.0   dak2            2/27 21:47   1+12:05:55 R  0    8.0 bash /home/mval/data/progressive_1/logs_3/model_20180227-214702_0/docker_run x
 8391.0   dak2            2/27 22:02   1+00:09:35 H  0    8.0 bash /home/mval/data/progressive_1/logs_4/model_20180227-220251_0/docker_run
 8392.0   dak2            2/27 22:02   1+00:09:35 H  0    8.0 bash /home/mval/data/progressive_1/logs_4/model_20180227-220253_0/docker_run
 8393.0   dak2            2/27 22:02   0+00:00:00 H  0    1.0 bash /home/mval/data/progressive_1/logs_4/model_20180227-220255_0/docker_run
@@ -79,3 +79,8 @@ sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_d
 8428.0   dak2            2/28 22:28   0+11:24:15 R  0    8.0 bash /home/mval/data/progressive_1/logs_4/model_20180228-222841_0/docker_run o
 8429.0   dak2            2/28 22:28   0+11:24:15 R  0    8.0 bash /home/mval/data/progressive_1/logs_4/model_20180228-222843_0/docker_run o
 
+8381.0   dak2            2/27 21:46   1+12:06:15 R  0    8.0 bash /home/mval/data/progressive_1/logs_3/model_20180227-214656_0/docker_run o # sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 1 --num-cpus 8 --killer --niter $iters --batchSize 16 --niter-decay 0 --fineSize 64 --loadSize 64 --workers 10 --dataset lsun --dataroot $ds_root --lr 0.00001 --beta1 0.0 --ngpu 1 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10
+
+## 128 resolution
+8435.0   dak2            3/1  15:48   0+00:00:00 I  0    1.0 bash /home/mval/data/progressive_1/logs_5/model_20180301-154827_0/docker_run ? sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 2 --num-cpus 8 --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 128 --loadSize 128 --workers 6 --dataset lsun --dataroot $ds_root --lr 0.00001 --beta1 0.0 --ngpu 2 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 1
+8436.0   dak2            3/1  15:48   0+00:00:00 I  0    1.0 bash /home/mval/data/progressive_1/logs_5/model_20180301-154829_0/docker_run ? sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus 2 --num-cpus 8 --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 128 --loadSize 128 --workers 6 --dataset lsun --dataroot $ds_root --lr 0.00001 --beta1 0.0 --ngpu 2 --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 2

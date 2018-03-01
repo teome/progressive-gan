@@ -170,6 +170,8 @@ def parse_args(default=False):
     parser.add_argument('--nz', type=int, default=512, help='size of the latent z vector')
     parser.add_argument('--ngf', type=int, default=64)
     parser.add_argument('--ndf', type=int, default=64)
+    parser.add_argument('--conv', type=str, default='impl', help='impl | paper | none | ...')
+    parser.add_argument('--linear', type=str, default='impl', help='impl | paper | none | ...')
     parser.add_argument('--niter', type=int, default=10000, help='number of iterations to train for')
     parser.add_argument('--niter-decay', type=int, default=200, help='number of iterations to decay learning rate')
     parser.add_argument('--stage-interval', type=int, default=300000, help='number of examples seen per stage')

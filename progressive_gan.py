@@ -63,13 +63,16 @@ class ProgressiveGAN:
 
         self.max_stage = max_stage
 
-        netG = Generator(self.nz, opt.ngf, max_stage=self.max_stage)
+        netG = Generator(self.nz, opt.ngf, max_stage=self.max_stage,
+                         conv=opt.conv)
         self.netG = netG
         with torch.no_grad():
-            self.netG_avg = Generator(self.nz, opt.ngf, max_stage=self.max_stage)
+            self.netG_avg = Generator(self.nz, opt.ngf, max_stage=self.max_stage,
+                                      conv=opt.conv)
         self.netD = None
         if not opt.phase == 'test':
-            netD = Discriminator(opt.ndf, max_stage=self.max_stage)
+            netD = Discriminator(opt.ndf, max_stage=self.max_stage,
+                                 conv=opt.conv, linear=opt.linear)
             self.netD = netD
         self.iter_count = self.load_model()
 

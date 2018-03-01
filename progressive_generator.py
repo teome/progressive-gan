@@ -14,6 +14,31 @@ def feature_vector_normalization(x, eps=1e-8):
     return alpha * x
 
 
+def get_conv(conv_desc):
+    if conv_desc == 'impl':
+        return EqualizedConv2dImpl
+    if conv_desc == 'paper':
+        return EqualizedConv2dPaper
+    if conv_desc == 'pf':
+        return EqualizedConv2dPf
+    if conv_desc == 'none' or conv_desc is None:
+        return EqualizedConv2dNone
+    else:
+        raise ValueError('invalid value for conv_desc:', conv_desc)
+
+def get_linear(linear_desc):
+    if linear_desc == 'impl':
+        return EqualizedLinearImpl
+    if linear_desc == 'paper':
+        return EqualizedLinearPaper
+    if linear_desc == 'pf':
+        return EqualizedLinearPaper
+    if linear_desc == 'none' or linear_desc is None:
+        return EqualizedLinearNone
+    else:
+        raise ValueError('invalid value for linear_desc:', linear_desc)
+
+
 # class EqualizedConv2d(nn.Module):
 #     def __init__(self, in_ch, out_ch, ksize, stride, pad):
 #         super(EqualizedConv2d, self).__init__()
@@ -43,10 +68,10 @@ def feature_vector_normalization(x, eps=1e-8):
 #         return r
 
 
-class EqualizedConv2d(nn.Module):
+class EqualizedConv2dImpl(nn.Module):
     """Equalized convolution: implementation version"""
     def __init__(self, in_ch, out_ch, ksize, stride, pad):
-        super(EqualizedConv2d, self).__init__()
+        super(EqualizedConv2dImpl, self).__init__()
         self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad, bias=False)
         self.bias = nn.Parameter(torch.Tensor(out_ch))
 
@@ -62,52 +87,48 @@ class EqualizedConv2d(nn.Module):
         return y + self.bias.view(1, self.bias.shape[0], 1, 1)
 
 
+class EqualizedConv2dPf(nn.Module):
+    def __init__(self, in_ch, out_ch, ksize, stride, pad):
+        super(EqualizedConv2dPf, self).__init__()
+        self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad)
 
-# class EqualizedConv2d(nn.Module):
-#     def __init__(self, in_ch, out_ch, ksize, stride, pad):
-#         super(EqualizedConv2d, self).__init__()
-#         self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad)
+        init.normal(self.c.weight.data, 0.0, 1.0)
+        self.scale = torch.FloatTensor([np.sqrt(2.0/(in_ch*ksize**2))])
 
-#         init.normal(self.c.weight.data, 0.0, 1.0)
-#         self.scale = torch.FloatTensor([np.sqrt(2.0/(in_ch*ksize**2))])
-
-#     def forward(self, x):
-#         return self.c(Variable(self.scale.type_as(x.data)) * x)
-
-
-# class EqualizedConv2d(nn.Module):
-#     """Alternate"""
-#     def __init__(self, in_ch, out_ch, ksize, stride, pad):
-#         super(EqualizedConv2d, self).__init__()
-#         # w = chainer.initializers.Normal(1.0) # equalized learning rate
-#         self.inv_c = torch.FloatTensor([np.sqrt(2.0/(in_ch*ksize**2))])
-#         self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad)
-
-#         init.normal(self.c.weight.data, 0.0, 1.0)
-
-#     def forward(self, x):
-#         return self.c(Variable(self.inv_c.type_as(x.data)) * x)
+    def forward(self, x):
+        return self.c(Variable(self.scale.type_as(x.data)) * x)
 
 
-# class EqualizedConv2d(nn.Module):
-#     """Paper version"""
-#     def __init__(self, in_ch, out_ch, ksize, stride, pad):
-#         super(EqualizedConv2d, self).__init__()
-#         self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad, bias=False)
-#         self.bias = nn.Parameter(torch.Tensor(out_ch))
+class EqualizedConv2dPaper(nn.Module):
+    """Paper version"""
+    def __init__(self, in_ch, out_ch, ksize, stride, pad):
+        super(EqualizedConv2dPaper, self).__init__()
+        self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad, bias=False)
+        self.bias = nn.Parameter(torch.Tensor(out_ch))
 
-#         init.normal(self.c.weight.data, 0.0, 1.0)
-#         init.constant(self.bias.data, 0.0)
-#         self.scale = torch.FloatTensor([np.sqrt(2.0/(in_ch*ksize**2))])
+        init.normal(self.c.weight.data, 0.0, 1.0)
+        init.constant(self.bias.data, 0.0)
+        self.scale = torch.FloatTensor([np.sqrt(2.0/(in_ch*ksize**2))])
 
-#     def forward(self, x):
-#         y = self.c(Variable(self.scale.type_as(x.data)) * x)
-#         return y + self.bias.view(1, self.bias.shape[0], 1, 1)
+    def forward(self, x):
+        y = self.c(Variable(self.scale.type_as(x.data)) * x)
+        return y + self.bias.view(1, self.bias.shape[0], 1, 1)
 
 
-class EqualizedLinear(nn.Module):
+class EqualizedConv2dNone(nn.Module):
+    """Standard convolution"""
+    def __init__(self, in_ch, out_ch, ksize, stride, pad):
+        super(EqualizedConv2dNone, self).__init__()
+        self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad, bias=True)
+        init.kaiming_normal(self.c.weight.data, mode='fan_in')
+
+    def forward(self, x):
+        return self.c(x)
+
+
+class EqualizedLinearImpl(nn.Module):
     def __init__(self, in_ch, out_ch):
-        super(EqualizedLinear, self).__init__()
+        super(EqualizedLinearImpl, self).__init__()
         self.inv_c = torch.FloatTensor([np.sqrt(2.0 / in_ch)])
         self.c = nn.Linear(in_ch, out_ch, bias=False)
         self.bias = nn.Parameter(torch.Tensor(out_ch))
@@ -122,33 +143,34 @@ class EqualizedLinear(nn.Module):
         y = Variable(self.scale.type_as(x.data)) * self.c(x)
         return y + self.bias.view(1, -1)
 
-# class EqualizedLinear(nn.Module):
-#     """No equalization"""
-#     def __init__(self, in_ch, out_ch):
-#         super(EqualizedLinear, self).__init__()
-#         self.c = nn.Linear(in_ch, out_ch, bias=True)
 
-#         init.kaiming_normal(self.c.weight.data, mode='fan_in')
+class EqualizedLinearNone(nn.Module):
+    """No equalization"""
+    def __init__(self, in_ch, out_ch):
+        super(EqualizedLinearNone, self).__init__()
+        self.c = nn.Linear(in_ch, out_ch, bias=True)
 
-#     def forward(self, x):
-#         return self.c(x)
+        init.kaiming_normal(self.c.weight.data, mode='fan_in')
+
+    def forward(self, x):
+        return self.c(x)
 
 
-# class EqualizedLinear(nn.Module):
-#     """Paper version"""
-#     def __init__(self, in_ch, out_ch):
-#         super(EqualizedLinear, self).__init__()
-#         self.c = nn.Linear(in_ch, out_ch, bias=False)
-#         self.bias = nn.Parameter(torch.Tensor(out_ch))
+class EqualizedLinearPaper(nn.Module):
+    """Paper version"""
+    def __init__(self, in_ch, out_ch):
+        super(EqualizedLinearPaper, self).__init__()
+        self.c = nn.Linear(in_ch, out_ch, bias=False)
+        self.bias = nn.Parameter(torch.Tensor(out_ch))
 
-#         init.normal(self.c.weight.data, 0.0, 1.0)
-#         init.constant(self.bias.data, 0.0)
-#         self.scale = torch.FloatTensor([np.sqrt(2.0 / in_ch)])
+        init.normal(self.c.weight.data, 0.0, 1.0)
+        init.constant(self.bias.data, 0.0)
+        self.scale = torch.FloatTensor([np.sqrt(2.0 / in_ch)])
 
-#     def forward(self, x):
-#         # return self.c(Variable(self.inv_c.type_as(x.data)) * x)
-#         y = Variable(self.scale.type_as(x.data)) * self.c(x)
-#         return y + self.bias.view(1, -1)
+    def forward(self, x):
+        # return self.c(Variable(self.inv_c.type_as(x.data)) * x)
+        y = Variable(self.scale.type_as(x.data)) * self.c(x)
+        return y + self.bias.view(1, -1)
 
 
 def minibatch_std(x):
@@ -165,11 +187,11 @@ def minibatch_std(x):
 
 
 class GenDownBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, pooling_comp=1.0):
+    def __init__(self, in_ch, out_ch, pooling_comp=1.0, conv=EqualizedConv2dImpl):
         super(GenDownBlock, self).__init__()
         self.pooling_comp = pooling_comp
-        self.c0 = EqualizedConv2d(in_ch, out_ch, 3, 1, 1)
-        self.c1 = EqualizedConv2d(out_ch, out_ch, 3, 1, 1)
+        self.c0 = conv(in_ch, out_ch, 3, 1, 1)
+        self.c1 = conv(out_ch, out_ch, 3, 1, 1)
 
     def forward(self, x):
         # x = F.leaky_relu(feature_vector_normalization(self.c0(x)), 0.2)
@@ -182,8 +204,8 @@ class GenDownBlock(nn.Module):
 class GenUpBlock(nn.Module):
     def __init__(self, in_ch, out_ch):
         super(GenUpBlock, self).__init__()
-        self.c0 = EqualizedConv2d(in_ch, out_ch, 3, 1, 1)
-        self.c1 = EqualizedConv2d(out_ch, out_ch, 3, 1, 1)
+        self.c0 = EqualizedConv2dImpl(in_ch, out_ch, 3, 1, 1)
+        self.c1 = EqualizedConv2dImpl(out_ch, out_ch, 3, 1, 1)
 
     def forward(self, x):
         x = F.upsample(x, scale_factor=2)
@@ -195,29 +217,30 @@ class GenUpBlock(nn.Module):
 
 class Generator(nn.Module):
     def __init__(self, nz, ngf, max_stage=12,
-                 pooling_comp=1.0):
+                 pooling_comp=1.0, conv='impl'):
         super(Generator, self).__init__()
         # super().__init__()
         self.max_stage = max_stage
         self.pooling_comp = pooling_comp
         self.nz = nz
+        conv = get_conv(conv)
 
-        self.c0 = EqualizedConv2d(nz, ngf, 4, 1, 3)
-        self.c1 = EqualizedConv2d(ngf, ngf, 3, 1, 1)
-        self.out0 = EqualizedConv2d(ngf, 3, 1, 1, 0)
+        self.c0 = conv(nz, ngf, 4, 1, 3)
+        self.c1 = conv(ngf, ngf, 3, 1, 1)
+        self.out0 = conv(ngf, 3, 1, 1, 0)
 
         self.b1 = GenUpBlock(ngf, ngf)
-        self.out1 = EqualizedConv2d(ngf, 3, 1, 1, 0)
+        self.out1 = conv(ngf, 3, 1, 1, 0)
         self.b2 = GenUpBlock(ngf, ngf)
-        self.out2 = EqualizedConv2d(ngf, 3, 1, 1, 0)
+        self.out2 = conv(ngf, 3, 1, 1, 0)
         self.b3 = GenUpBlock(ngf, ngf)
-        self.out3 = EqualizedConv2d(ngf, 3, 1, 1, 0)
+        self.out3 = conv(ngf, 3, 1, 1, 0)
         self.b4 = GenUpBlock(ngf, ngf)
-        self.out4 = EqualizedConv2d(ngf, 3, 1, 1, 0)
+        self.out4 = conv(ngf, 3, 1, 1, 0)
         self.b5 = GenUpBlock(ngf, ngf)
-        self.out5 = EqualizedConv2d(ngf, 3, 1, 1, 0)
+        self.out5 = conv(ngf, 3, 1, 1, 0)
         self.b6 = GenUpBlock(ngf, ngf // 2)
-        self.out6 = EqualizedConv2d(ngf // 2, 3, 1, 1, 0)
+        self.out6 = conv(ngf // 2, 3, 1, 1, 0)
 
     def sample_latent(self, batch_size):
         z = torch.FloatTensor(batch_size, self.nz, 1, 1).normal_(0, 1)
@@ -298,12 +321,13 @@ class Generator(nn.Module):
 
 
 class DiscriminatorBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, pooling_comp=1.0):
+    def __init__(self, in_ch, out_ch, pooling_comp=1.0,
+                 conv=EqualizedConv2dImpl):
         super(DiscriminatorBlock, self).__init__()
         self.pooling_comp = pooling_comp
 
-        self.c0 = EqualizedConv2d(in_ch, in_ch, 3, 1, 1)
-        self.c1 = EqualizedConv2d(in_ch, out_ch, 3, 1, 1)
+        self.c0 = conv(in_ch, in_ch, 3, 1, 1)
+        self.c1 = conv(in_ch, out_ch, 3, 1, 1)
 
     def forward(self, x):
         h = F.leaky_relu(self.c0(x))
@@ -313,30 +337,33 @@ class DiscriminatorBlock(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, ndf=512, max_stage=12, pooling_comp=1.0):
+    def __init__(self, ndf=512, max_stage=12, pooling_comp=1.0,
+                 conv='impl', linear='impl'):
         super(Discriminator, self).__init__()
         self.max_stage = max_stage
         self.pooling_comp = pooling_comp
+        conv = get_conv(conv)
+        linear = get_linear(linear)
 
-        self.in6 = EqualizedConv2d(3, ndf // 2, 1, 1, 0)
+        self.in6 = conv(3, ndf // 2, 1, 1, 0)
         self.b6 = DiscriminatorBlock(ndf // 2, ndf, pooling_comp)
-        self.in5 = EqualizedConv2d(3, ndf, 1, 1, 0)
+        self.in5 = conv(3, ndf, 1, 1, 0)
         self.b5 = DiscriminatorBlock(ndf, ndf, pooling_comp)
-        self.in4 = EqualizedConv2d(3, ndf, 1, 1, 0)
+        self.in4 = conv(3, ndf, 1, 1, 0)
         self.b4 = DiscriminatorBlock(ndf, ndf, pooling_comp)
-        self.in3 = EqualizedConv2d(3, ndf, 1, 1, 0)
+        self.in3 = conv(3, ndf, 1, 1, 0)
         self.b3 = DiscriminatorBlock(ndf, ndf, pooling_comp) # Input Nxndfx32x32
-        self.in2 = EqualizedConv2d(3, ndf, 1, 1, 0)
+        self.in2 = conv(3, ndf, 1, 1, 0)
         self.b2 = DiscriminatorBlock(ndf, ndf, pooling_comp)
-        self.in1 = EqualizedConv2d(3, ndf, 1, 1, 0)
+        self.in1 = conv(3, ndf, 1, 1, 0)
         self.b1 = DiscriminatorBlock(ndf, ndf, pooling_comp)
-        self.in0 = EqualizedConv2d(3, ndf, 1, 1, 0)
+        self.in0 = conv(3, ndf, 1, 1, 0)
         # Differs from generator whindf grows from 0
 
         # Shape here [Bx4x4x4]
-        self.out0 = EqualizedConv2d(ndf + 1, ndf, 3, 1, 1)
-        self.out1 = EqualizedConv2d(ndf, ndf, 4, 1, 0)
-        self.out2 = EqualizedLinear(ndf, 1)
+        self.out0 = conv(ndf + 1, ndf, 3, 1, 1)
+        self.out1 = conv(ndf, ndf, 4, 1, 0)
+        self.out2 = linear(ndf, 1)
 
     def forward(self, x, stage):
         if torch.is_tensor(stage):
