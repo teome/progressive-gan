@@ -101,7 +101,7 @@ def run_training(test_num, train_args):
 
     cond_args = 'Arguments = %s' % (docker_run_file)
     if args.machine == 'mval5.mval':
-        num_cpus = 10
+        num_cpus = args.num_cpus or 10
         memory = args.memory or 16 * args.num_gpus
         machines_req = "(machine == \"mval5.mval\")"
     elif args.machine == 'any':

@@ -122,7 +122,8 @@ def main(opt):
             model.save('%06d' % iteration)
         if iterp1 % opt.image_save_freq == 0:
             model.generate_images(scale=True)
-            model.generate_saliency(scale=True)
+            if opt.saliency:
+                model.generate_saliency(scale=True)
         if iterp1 % opt.print_iter_freq == 0:
             print('End of iteration %d / %d \t %.3f sec/iter' %
                 (iteration, opt.niter + opt.niter_decay,
@@ -199,6 +200,7 @@ def parse_args(default=False):
     parser.add_argument('--model-save-freq', type=int, default=100, help='frequency to save model')
     parser.add_argument('--image-save-freq', type=int, default=100, help='frequency to save images')
     parser.add_argument('--comp-const', type=str, default='1/1', help='G/D training period')
+    parser.add_argument('--saliency', action='store_true', help='generate saliency map')
     parser.add_argument('--killer', action='store_true')
     parser.add_argument('--print-network', action='store_true', help='print network structure')
 

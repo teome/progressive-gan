@@ -44,7 +44,7 @@ def feature_vector_normalization(x, eps=1e-8):
 
 
 class EqualizedConv2d(nn.Module):
-    """Equalized convolution"""
+    """Equalized convolution: implementation version"""
     def __init__(self, in_ch, out_ch, ksize, stride, pad):
         super(EqualizedConv2d, self).__init__()
         self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad, bias=False)
@@ -60,6 +60,7 @@ class EqualizedConv2d(nn.Module):
         # return self.c(Variable(self.scale.type_as(x.data)) * x)
         y = Variable(self.scale.type_as(x.data)) * self.c(x)
         return y + self.bias.view(1, self.bias.shape[0], 1, 1)
+
 
 
 # class EqualizedConv2d(nn.Module):
@@ -88,16 +89,20 @@ class EqualizedConv2d(nn.Module):
 #         return self.c(Variable(self.inv_c.type_as(x.data)) * x)
 
 
-class EqualizedNormalConv2d(nn.Module):
-    def __init__(self, in_ch, out_ch, ksize, stride, pad):
-        super(EqualizedConv2d, self).__init__()
-        self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad)
+# class EqualizedConv2d(nn.Module):
+#     """Paper version"""
+#     def __init__(self, in_ch, out_ch, ksize, stride, pad):
+#         super(EqualizedConv2d, self).__init__()
+#         self.c = nn.Conv2d(in_ch, out_ch, ksize, stride, pad, bias=False)
+#         self.bias = nn.Parameter(torch.Tensor(out_ch))
 
-        init.normal(self.c.weight.data, 0.0, 1.0)
-        self.scale = torch.FloatTensor([np.sqrt(2.0/(in_ch*ksize**2))])
+#         init.normal(self.c.weight.data, 0.0, 1.0)
+#         init.constant(self.bias.data, 0.0)
+#         self.scale = torch.FloatTensor([np.sqrt(2.0/(in_ch*ksize**2))])
 
-    def forward(self, x):
-        return self.c(Variable(self.scale.type_as(x.data)) * x)
+#     def forward(self, x):
+#         y = self.c(Variable(self.scale.type_as(x.data)) * x)
+#         return y + self.bias.view(1, self.bias.shape[0], 1, 1)
 
 
 class EqualizedLinear(nn.Module):
@@ -107,6 +112,7 @@ class EqualizedLinear(nn.Module):
         self.c = nn.Linear(in_ch, out_ch, bias=False)
         self.bias = nn.Parameter(torch.Tensor(out_ch))
 
+        init.kaiming_normal(self.c.weight.data, mode='fan_in')
         init.constant(self.bias.data, 0.0)
         self.scale = torch.FloatTensor([self.c.weight.data.norm(2)])
         self.c.weight.data.div_(self.scale)
@@ -116,17 +122,33 @@ class EqualizedLinear(nn.Module):
         y = Variable(self.scale.type_as(x.data)) * self.c(x)
         return y + self.bias.view(1, -1)
 
-
 # class EqualizedLinear(nn.Module):
+#     """No equalization"""
 #     def __init__(self, in_ch, out_ch):
 #         super(EqualizedLinear, self).__init__()
 #         self.c = nn.Linear(in_ch, out_ch, bias=True)
+
+#         init.kaiming_normal(self.c.weight.data, mode='fan_in')
+
+#     def forward(self, x):
+#         return self.c(x)
+
+
+# class EqualizedLinear(nn.Module):
+#     """Paper version"""
+#     def __init__(self, in_ch, out_ch):
+#         super(EqualizedLinear, self).__init__()
+#         self.c = nn.Linear(in_ch, out_ch, bias=False)
+#         self.bias = nn.Parameter(torch.Tensor(out_ch))
+
+#         init.normal(self.c.weight.data, 0.0, 1.0)
+#         init.constant(self.bias.data, 0.0)
 #         self.scale = torch.FloatTensor([np.sqrt(2.0 / in_ch)])
 
 #     def forward(self, x):
 #         # return self.c(Variable(self.inv_c.type_as(x.data)) * x)
 #         y = Variable(self.scale.type_as(x.data)) * self.c(x)
-#         return y
+#         return y + self.bias.view(1, -1)
 
 
 def minibatch_std(x):
