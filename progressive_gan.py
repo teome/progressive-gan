@@ -81,6 +81,9 @@ class ProgressiveGAN:
         gpu_ids = range(self.ngpu) if self.ngpu > 0 else None
         self.netG = nn.parallel.DataParallel(netG.cuda(), device_ids=gpu_ids)
         self.netG_avg = nn.parallel.DataParallel(self.netG_avg.cuda(), device_ids=gpu_ids)
+        # Only load to GPU when necessary
+        self.netG_avg.module.cpu()
+
         if not opt.phase == 'test':
             self.netD = nn.parallel.DataParallel(netD.cuda(), device_ids=gpu_ids)
 
@@ -276,9 +279,9 @@ class ProgressiveGAN:
 
         if self.phase == 'train':
             for pavg, p in zip(self.netG_avg.parameters(), self.netG.parameters()):
+                pavg.data.mul_(0.999).add_(0.001, p.data.clone().cpu())
                 # Stay on the GPU not CPU
-                # pavg.data.mul_(0.999).add_(0.001, p.data.clone().cpu())
-                pavg.data.mul_(0.999).add_(0.001, p.data.clone())
+                # pavg.data.mul_(0.999).add_(0.001, p.data.clone())
 
     def update(self, x_real_cpu):
         stage = self.stage
@@ -488,18 +491,18 @@ class ProgressiveGAN:
         return latest_iter
 
     # helper saving function that can be used by subclasses
-    def save_network(self, network, network_label, epoch_label):
+    def save_network(self, network, network_label, epoch_label, to_gpu=True):
         save_filename = '%s_net_%s.pth' % (epoch_label, network_label)
         save_path = os.path.join(self.outf, save_filename)
         if type(network) == torch.nn.parallel.DataParallel:
             devs = network.device_ids
             net_module = network.module
             torch.save(net_module.cpu().state_dict(), save_path)
-            if len(devs) > 0:
+            if len(devs) > 0 and to_gpu:
                 net_module.cuda(devs[0])
         else:
             torch.save(network.cpu().state_dict(), save_path)
-            if self.ngpu > 0 and torch.cuda.is_available():
+            if self.ngpu > 0 and torch.cuda.is_available() and to_gpu:
                 network.cuda(device=0)
 
     # helper loading function that can be used by subclasses
@@ -572,7 +575,13 @@ class ProgressiveGAN:
         real = self.input
         with torch.no_grad():
             fake = self.netG(Variable(self.latent_fixed[:n]), self.stage)
+            if self.ngpu > 0:
+                self.netG.module.cpu()
+                self.netG_avg.module.cuda(0)
             fake_avg = self.netG_avg(self.latent_fixed[:n], self.stage)
+            if self.ngpu > 0:
+                self.netG.module.cuda(0)
+                self.netG_avg.module.cpu()
 
         if scale:
             with torch.no_grad():
@@ -637,7 +646,7 @@ class ProgressiveGAN:
 
     def save(self, label):
         self.save_network(self.netG, 'G', label)
-        self.save_network(self.netG_avg, 'G_avg', label)
+        self.save_network(self.netG_avg, 'G_avg', label, to_gpu=False)
         self.save_network(self.netD, 'D', label)
 
     def should_train(self):
