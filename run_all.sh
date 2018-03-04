@@ -131,30 +131,45 @@ machine='mval5.mval'
 # sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.00005 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 3 --conv none --linear none --latent-fixed-bs 64
 
 
+# machine='mval3.mval'
+# chkp_dir='/home/mval/data/progressive_1/logs_7/'; mkdir -p $chkp_dir
+# max_stage=12
+# stage_interval=800000
+# stage_iters=$(($stage_interval/32))
+# iters=$((${stage_iters}*18))
+# model_save_freq=$((${stage_iters}/10)) # 1175
+# image_save_freq=$(($stage_iters/25))
+# print_iter_freq=$(($stage_iters/200))
+# train_log_freq=$print_iter_freq
+# ngpu=2
+# ncpu=$(($ngpu*4))
+# Repeat broken on mval4
+# sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.00001 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 1 --conv none --linear none --latent-fixed-bs 64
+# sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.00010 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 1 --conv none --linear none --latent-fixed-bs 64
+
+
+# machine='mval5.mval'
+# ngpu=2
+# ncpu=$(($ngpu*8))
+# sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.00001 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 1 --conv impl --linear impl --latent-fixed-bs 64
+# sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.00001 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 2 --conv impl --linear impl --latent-fixed-bs 64
+# sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.000005 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 2 --conv impl --linear impl --latent-fixed-bs 64
+# sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.000005 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 3 --conv impl --linear impl --latent-fixed-bs 64
+
 machine='mval3.mval'
 chkp_dir='/home/mval/data/progressive_1/logs_7/'; mkdir -p $chkp_dir
 max_stage=12
-stage_interval=800000
-stage_iters=$(($stage_interval/32))
-iters=$((${stage_iters}*18))
+stage_interval=400000
+stage_iters=$(($stage_interval/20))
+iters=$((${stage_iters}*16))
+iter_decay=$(($((15000000/20))-${iters}))
 model_save_freq=$((${stage_iters}/10)) # 1175
 image_save_freq=$(($stage_iters/25))
 print_iter_freq=$(($stage_iters/200))
 train_log_freq=$print_iter_freq
 ngpu=2
 ncpu=$(($ngpu*4))
-# Repeat broken on mval4
-sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.00001 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 1 --conv none --linear none --latent-fixed-bs 64
-sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.00010 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 1 --conv none --linear none --latent-fixed-bs 64
-
-
-machine='mval5.mval'
-ngpu=2
-ncpu=$(($ngpu*8))
-sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.00001 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 1 --conv impl --linear impl --latent-fixed-bs 64
-sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.00001 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 2 --conv impl --linear impl --latent-fixed-bs 64
-sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.000005 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 2 --conv impl --linear impl --latent-fixed-bs 64
-sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --batchSize 32 --niter-decay 0 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.000005 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 3 --conv impl --linear impl --latent-fixed-bs 64
+sleep 1.1; python cv_condor.py --project-dir $proj_dir --checkpoints-dir $chkp_dir --machine $machine --auto-continue --num-gpus $ngpu --num-cpus $ncpu --killer --niter $iters --niter-decay $iter_decay --batchSize 20 --fineSize 256 --loadSize 256 --workers $ngpu --dataset lsun --dataroot $ds_root --lr 0.00001 --beta1 0.0 --ngpu $ngpu --beta2 0.99 --max-stage $max_stage --stage-interval $stage_interval --print-iter-freq $print_iter_freq --train-log-freq $print_iter_freq --model-save-freq $model_save_freq --image-save-freq $image_save_freq --WGAN-GP-lambda 10 --n-dis 1 --conv impl --linear impl --latent-fixed-bs 64
 
 
 # export NV_GPU=$CUDA_VISIBLE_DEVICES
