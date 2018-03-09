@@ -593,7 +593,7 @@ class ProgressiveGAN:
         os.makedirs(save_path, exist_ok=True)
 
         vutils.save_image(
-            self.input[:n],
+            self.x_real.data[:n],
             '%s/real_samples.png' % self.opt.outf,
             normalize=True)
 

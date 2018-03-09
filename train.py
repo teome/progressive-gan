@@ -46,6 +46,7 @@ def main(opt):
                                 transform=transforms.Compose([
                                     transforms.Resize(opt.loadSize),
                                     transforms.CenterCrop(opt.fineSize),
+                                    transforms.RandomHorizontalFlip(0.5),
                                     transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                 ]))
@@ -54,6 +55,7 @@ def main(opt):
                             transform=transforms.Compose([
                                 transforms.Resize(opt.loadSize),
                                 transforms.CenterCrop(opt.fineSize),
+                                transforms.RandomHorizontalFlip(0.5),
                                 transforms.ToTensor(),
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                             ]))
@@ -104,7 +106,7 @@ def main(opt):
 
     training_start_time = time.time()
     timing_iter = 1
-    while model.iter_count < opt.niter:
+    while model.iter_count < opt.niter + opt.niter_decay:
         for iter_dis in range(opt.n_dis):
             real_cpu, _ = get_batch()
             model.update_discriminator(real_cpu)
@@ -182,6 +184,7 @@ def parse_args(default=False):
     parser.add_argument('--optimizer', type=str, default='adam', help='adam | rms')
     parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
     parser.add_argument('--lr-policy', type=str, default='lambda', help='lr scheduler policy')
+    parser.add_argument('--lr-decay-iters', type=int, default=1e6, help='lr decay steps')
     parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
     parser.add_argument('--beta2', type=float, default=0.999, help='beta2 for adam. default=0.999')
     parser.add_argument('--WGAN-GP-gamma', type=float, default=1.0, help='WGAN-GP gamma')
